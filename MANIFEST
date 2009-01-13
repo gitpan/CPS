@@ -1,0 +1,13 @@
+Build.PL
+lib/CPS.pm
+MANIFEST			This list of files
+t/00use.t
+t/01kwhile.t
+t/02kforeach.t
+t/03kmap.t
+t/04kgrep.t
+t/05kfold.t
+t/06kgenerate.t
+t/10liftk.t
+Makefile.PL
+META.yml
