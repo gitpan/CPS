@@ -7,9 +7,11 @@ package CPS;
 
 use strict;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 use Carp;
+
+use Scalar::Util qw( weaken );
 
 use base qw( Exporter );
 
@@ -118,14 +120,6 @@ it indicates the end of the loop, then invoke C<$k>.
 If C<$knext> is invoked, the body will be called again. If C<$klast> is
 invoked, the continuation C<$k> is invoked.
 
-It is important to eventually call C<$klast> if the loop has finished, because
-this destroys the internal closure used to implement the iteration. Without
-this, a memory cycle will ensure the object stays in memory forever, resulting
-in a memory leak.
-
-I<TODO>: Experiment with C<Scalar::Util::weaken()> to see if this restriction
-can be lifted.
-
 =cut
 
 sub kwhile
@@ -139,20 +133,25 @@ sub kwhile
    my $again = 0;
 
    my $iter; $iter = sub {
+      my $knext = $iter;
+
       $sync = 1;
       $body->(
-         sub { $sync ? $again=1 : goto &$iter },
-         sub { undef $iter; goto &$k },
+         sub { $sync ? $again=1 : goto &$knext },
+         $k,
       );
       $sync = 0;
 
       if( $again ) {
          $again = 0;
-         goto &$iter; # tailcall
+         goto &$knext; # tailcall
       }
    };
 
-   goto &$iter;
+   my $kfirst = $iter;
+   weaken( $iter );
+
+   goto &$kfirst;
 }
 
 =head2 kforeach( \@items, \&body, $k )

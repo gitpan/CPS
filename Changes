@@ -1,0 +1,9 @@
+Revision history for CPS
+
+0.02    CHANGES:
+         * Use Scalar::Util::weaken() in kwhile(), breaking cycle for $iter
+           and allowing body to care less about leaks. Also allows passthrough
+           of $k without intermediate sub{}
+
+0.01    First version, released on an unsuspecting world.
+
