@@ -1,6 +1,8 @@
 use strict;
 use warnings;
 
+use 5.008;
+
 use Module::Build;
 
 my $build = Module::Build->new

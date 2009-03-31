@@ -1,5 +1,9 @@
 Revision history for CPS
 
+0.03    BUGFIXES:
+         * Declare dependency on at least perl 5.8 since weaken() fails tests on
+           earlier perls
+
 0.02    CHANGES:
          * Use Scalar::Util::weaken() in kwhile(), breaking cycle for $iter
            and allowing body to care less about leaks. Also allows passthrough
