@@ -6,8 +6,9 @@
 package CPS;
 
 use strict;
+use warnings;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 use Carp;
 
@@ -25,6 +26,7 @@ our @EXPORT_OK = qw(
    kgenerate
 
    liftk
+   dropk
 );
 
 =head1 NAME
@@ -463,6 +465,65 @@ sub liftk(&)
    };
 }
 
+=head2 $func = dropk { BLOCK } $kfunc
+
+=head2 $func = dropk $waitfunc, $kfunc
+
+Returns a new CODE reference to a plain call/return version of the passed
+CPS-style CODE reference. When the returned ("dropped") function is called,
+it invokes the passed CPS function, then waits for it to invoke its
+continuation. When it does, the list that was passed to the continuation is
+returned by the dropped function. If called in scalar context, only the first
+value in the list is returned.
+
+ $kfunc->( @func_args, $k )
+    $k->( @func_ret )
+
+ $waitfunc->()
+
+ @func_ret = $func->( @func_args )
+
+Given the following trivial CPS function:
+
+ $kadd = sub { $_[2]->( $_[0] + $_[1] ) };
+
+The following are equivalent
+
+ $kadd->( 10, 20, sub { print "The total is $_[0]\n" } );
+
+ $add = dropk { } $kadd;
+ print "The total is ".$add->( 10, 20 )."\n";
+
+In the general case the CPS function hasn't yet invoked its continuation by
+the time it returns (such as would be the case when using any sort of
+asynchronisation or event-driven framework). For C<dropk> to actually work in
+this situation, it requires a way to run the event framework, to cause it to
+process events until the continuation has been invoked.
+
+This is provided by the block, or the first passed CODE reference. When the
+returned function is invoked, it repeatedly calls the block or wait function,
+until the CPS function has invoked its continuation.
+
+=cut
+
+sub dropk(&$)
+{
+   my ( $waitfunc, $kfunc ) = @_;
+
+   return sub {
+      my @result;
+      my $done;
+
+      $kfunc->( @_, sub { @result = @_; $done = 1 } );
+
+      while( !$done ) {
+         $waitfunc->();
+      }
+
+      return wantarray ? @result : $result[0];
+   }
+}
+
 # Keep perl happy; keep Britain tidy
 1;
 
@@ -602,8 +663,7 @@ larger, and stand out more clearly against the background boilerplate.
 
 =item *
 
-L<Continuation-passing style |http://en.wikipedia.org/wiki/Continuation-passing_style>
-on wikipedia
+L<http://en.wikipedia.org/wiki/Continuation-passing_style> on wikipedia
 
 =item *
 
@@ -613,4 +673,4 @@ L<Coro> - co-routines in Perl
 
 =head1 AUTHOR
 
-Paul Evans E<lt>leonerd@leonerd.org.ukE<gt>
+Paul Evans <leonerd@leonerd.org.uk>

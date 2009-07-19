@@ -12,4 +12,8 @@ t/04kgrep.t
 t/05kfold.t
 t/06kgenerate.t
 t/10liftk.t
+t/11dropk.t
 t/20leakcheck.t
+t/99pod.t
+README
+LICENSE
