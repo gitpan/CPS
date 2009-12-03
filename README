@@ -179,6 +179,58 @@ FUNCTIONS
     invoked, the passed items, if any, are appended to the return list, then
     the entire list is passed to $k.
 
+  kdescendd( $root, \&body, $k )
+    CPS version of recursive descent on a tree-like structure, defined by a
+    function, "body", which when given a node in the tree, yields a list of
+    child nodes.
+
+     $body->( $node, $kmore )
+        $kmore->( @child_nodes )
+
+     $k->()
+
+    The first value to be passed into "body" is $root.
+
+    At each iteration, a node is given to the "body" function, and it is
+    expected to pass a list of child nodes into its $kmore continuation.
+    These will then be iterated over, in the order given. The tree-like
+    structure is visited depth-first, descending fully into one subtree of a
+    node before moving on to the next.
+
+    This function does not provide a way for the body to accumulate a
+    resultant data structure to pass into its own continuation. The body is
+    executed simply for its side-effects and its continuation is invoked
+    with no arguments. A variable of some sort should be shared between the
+    body and the continuation if this is required.
+
+  kdescendb( $root, \&body, $k )
+    A breadth-first variation of "kdescendd". This function visits each
+    child node of the parent, before iterating over all of these nodes's
+    children, recursively until the bottom of the tree.
+
+GOVERNORS
+    All of the above functions are implemented using a loop which repeatedly
+    calls the body function until some terminating condition. By controlling
+    the way this loop re-invokes itself, a program can control the behaviour
+    of the functions.
+
+    For every one of the above functions, there also exists a variant which
+    takes a CPS::Governor object as its first argument. These functions use
+    the governor object to control their iteration.
+
+     kwhile( \&body, $k )
+     gkwhile( $gov, \&body, $k )
+
+     kforeach( \@items, \&body, $k )
+     gkforeach( $gov, \@items, \&body, $k )
+
+     etc...
+
+    In this way, other governor objects can be constructed which have
+    different running properties; such as interleaving iterations of their
+    loop with other IO activity in an event-driven framework, or giving
+    rate-limitation control on the speed of iteration of the loop.
+
 CPS UTILITIES
     These function names do not begin with "k" because they are not
     themselves CPS primatives, but may be useful in CPS-oriented code.
@@ -312,18 +364,18 @@ EXAMPLES
     next one:
 
      use CPS qw( kgenerate );
-     
- kgenerate(
+ 
+     kgenerate(
         [ 2, 3 ],
         sub {
            my ( $vals, $kmore, $kdone ) = @_;
-     
-       return $kdone->() if @$vals >= 50;
-     
-       PRIME: for( my $n = $vals->[-1] + 2; ; $n += 2 ) {
+ 
+           return $kdone->() if @$vals >= 50;
+ 
+           PRIME: for( my $n = $vals->[-1] + 2; ; $n += 2 ) {
               $n % $_ == 0 and next PRIME for @$vals;
-     
-          push @$vals, $n;
+ 
+              push @$vals, $n;
               return $kmore->( $vals, $n );
            }
         },

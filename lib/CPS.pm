@@ -8,7 +8,7 @@ package CPS;
 use strict;
 use warnings;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use Carp;
 
@@ -16,18 +16,27 @@ use Scalar::Util qw( weaken );
 
 use base qw( Exporter );
 
-our @EXPORT_OK = qw(
+our @CPS_PRIMS = qw(
    kwhile
    kforeach
    kmap
    kgrep
-   kfoldl
-   kfoldr
+   kfoldl kfoldr
    kgenerate
+   kdescendd kdescendb
+);
 
+our @EXPORT_OK = (
+   @CPS_PRIMS,
+   map( "g$_", @CPS_PRIMS ),
+
+qw(
    liftk
    dropk
+),
 );
+
+use CPS::Governor::Simple;
 
 =head1 NAME
 
@@ -124,29 +133,37 @@ invoked, the continuation C<$k> is invoked.
 
 =cut
 
-sub kwhile
+sub gkwhile
 {
-   my ( $body, $k ) = @_;
+   my ( $gov, $body, $k ) = @_;
 
    ref $body eq "CODE" or croak 'Expected $body as CODE ref';
    ref $k  eq "CODE" or croak 'Expected $k as CODE ref';
 
    my $sync;
-   my $again = 0;
+   my $do_again = 0;
+
+   # We can't just call this as a method because we need to tailcall it
+   # Instead, keep a reference to the actual method so we can goto &$again
+   my $again = $gov->can('again') or croak "Governor cannot ->again";
 
    my $iter; $iter = sub {
       my $knext = $iter;
 
       $sync = 1;
       $body->(
-         sub { $sync ? $again=1 : goto &$knext },
-         $k,
+         sub {
+            if( $sync ) { $do_again=1 }
+            else        { @_ = ( $gov, $knext ); goto &$again; }
+         },
+         sub { undef $again; goto &$k },
       );
       $sync = 0;
 
-      if( $again ) {
-         $again = 0;
-         goto &$knext; # tailcall
+      if( $do_again ) {
+         $do_again = 0;
+         @_ = ( $gov, $knext );
+         goto &$again;
       }
    };
 
@@ -170,16 +187,16 @@ invokes its C<$klast> continuation, then invoke C<$k>.
 
 =cut
 
-sub kforeach
+sub gkforeach
 {
-   my ( $items, $body, $k ) = @_;
+   my ( $gov, $items, $body, $k ) = @_;
 
    ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
    ref $body eq "CODE" or croak 'Expected $body as CODE ref';
 
    my $idx = 0;
 
-   kwhile(
+   gkwhile( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast unless $idx < scalar @$items;
@@ -208,9 +225,9 @@ of all the collected values.
 
 =cut
 
-sub kmap
+sub gkmap
 {
-   my ( $items, $body, $k ) = @_;
+   my ( $gov, $items, $body, $k ) = @_;
 
    ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
    ref $body eq "CODE" or croak 'Expected $body as CODE ref';
@@ -218,7 +235,7 @@ sub kmap
    my @ret;
    my $idx = 0;
 
-   kwhile(
+   gkwhile( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast unless $idx < scalar @$items;
@@ -246,9 +263,9 @@ and passed a list of the subset of C<@items> which were selected.
 
 =cut
 
-sub kgrep
+sub gkgrep
 {
-   my ( $items, $body, $k ) = @_;
+   my ( $gov, $items, $body, $k ) = @_;
 
    ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
    ref $body eq "CODE" or croak 'Expected $body as CODE ref';
@@ -256,7 +273,7 @@ sub kgrep
    my @ret;
    my $idx = 0;
 
-   kwhile(
+   gkwhile( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast unless $idx < scalar @$items;
@@ -300,9 +317,9 @@ an initial value is required, this can be provided by
 
 =cut
 
-sub kfoldl
+sub gkfoldl
 {
-   my ( $items, $body, $k ) = @_;
+   my ( $gov, $items, $body, $k ) = @_;
 
    ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
    ref $body eq "CODE" or croak 'Expected $body as CODE ref';
@@ -313,7 +330,7 @@ sub kfoldl
    my $idx = 0;
    my $acc = $items->[$idx++];
 
-   kwhile(
+   gkwhile( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast unless $idx < scalar @$items;
@@ -346,9 +363,9 @@ though note it has to be last this time:
 
 =cut
 
-sub kfoldr
+sub gkfoldr
 {
-   my ( $items, $body, $k ) = @_;
+   my ( $gov, $items, $body, $k ) = @_;
 
    ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
    ref $body eq "CODE" or croak 'Expected $body as CODE ref';
@@ -359,7 +376,7 @@ sub kfoldr
    my $idx = scalar(@$items) - 1;
    my $acc = $items->[$idx--];
 
-   kwhile(
+   gkwhile( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast if $idx < 0;
@@ -396,15 +413,15 @@ entire list is passed to C<$k>.
 
 =cut
 
-sub kgenerate
+sub gkgenerate
 {
-   my ( $seed, $body, $k ) = @_;
+   my ( $gov, $seed, $body, $k ) = @_;
 
    ref $body eq "CODE" or croak 'Expected $body as CODE ref';
 
    my @ret;
 
-   kwhile(
+   gkwhile( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          @_ = (
@@ -416,6 +433,136 @@ sub kgenerate
       },
       sub { $k->( @ret ) },
    );
+}
+
+=head2 kdescendd( $root, \&body, $k )
+
+CPS version of recursive descent on a tree-like structure, defined by a
+function, C<body>, which when given a node in the tree, yields a list of
+child nodes.
+
+ $body->( $node, $kmore )
+    $kmore->( @child_nodes )
+
+ $k->()
+
+The first value to be passed into C<body> is C<$root>. 
+
+At each iteration, a node is given to the C<body> function, and it is expected
+to pass a list of child nodes into its C<$kmore> continuation. These will then
+be iterated over, in the order given. The tree-like structure is visited 
+depth-first, descending fully into one subtree of a node before moving on to
+the next.
+
+This function does not provide a way for the body to accumulate a resultant
+data structure to pass into its own continuation. The body is executed simply
+for its side-effects and its continuation is invoked with no arguments. A
+variable of some sort should be shared between the body and the continuation
+if this is required.
+
+=cut
+
+sub gkdescendd
+{
+   my ( $gov, $root, $body, $k ) = @_;
+
+   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
+
+   my @stack = ( $root );
+
+   gkwhile( $gov,
+      sub {
+         my ( $knext, $klast ) = @_;
+         @_ = (
+            shift @stack,
+            sub {
+               unshift @stack, @_;
+
+               goto &$knext if @stack;
+               goto &$klast;
+            },
+         );
+         goto &$body;
+      },
+      $k,
+   );
+}
+
+=head2 kdescendb( $root, \&body, $k )
+
+A breadth-first variation of C<kdescendd>. This function visits each child
+node of the parent, before iterating over all of these nodes's children,
+recursively until the bottom of the tree.
+
+=cut
+
+sub gkdescendb
+{
+   my ( $gov, $root, $body, $k ) = @_;
+
+   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
+
+   my @queue = ( $root );
+
+   gkwhile( $gov,
+      sub {
+         my ( $knext, $klast ) = @_;
+         @_ = (
+            shift @queue,
+            sub {
+               push @queue, @_;
+
+               goto &$knext if @queue;
+               goto &$klast;
+            },
+         );
+         goto &$body;
+      },
+      $k,
+   );
+}
+
+=head1 GOVERNORS
+
+All of the above functions are implemented using a loop which repeatedly calls
+the body function until some terminating condition. By controlling the way
+this loop re-invokes itself, a program can control the behaviour of the
+functions.
+
+For every one of the above functions, there also exists a variant which takes
+a L<CPS::Governor> object as its first argument. These functions use the
+governor object to control their iteration.
+
+ kwhile( \&body, $k )
+ gkwhile( $gov, \&body, $k )
+
+ kforeach( \@items, \&body, $k )
+ gkforeach( $gov, \@items, \&body, $k )
+
+ etc...
+
+In this way, other governor objects can be constructed which have different
+running properties; such as interleaving iterations of their loop with other
+IO activity in an event-driven framework, or giving rate-limitation control on
+the speed of iteration of the loop.
+
+=cut
+
+# The above is a lie. The basic functions provided are actually the gk*
+# versions; we wrap these to make the normal k* functions by passing a simple
+# governor.
+{
+   my $default_gov = CPS::Governor::Simple->new;
+
+   no strict 'refs';
+
+   foreach my $prim ( @CPS_PRIMS  ) {
+      my $func = \&{"g$prim"};
+      *{$prim} = sub {
+         unshift @_, $default_gov;
+         goto &$func;
+      };
+   }
 }
 
 =head1 CPS UTILITIES

@@ -1,6 +1,6 @@
 ---
 name: CPS
-version: 0.04
+version: 0.05
 author:
   - 'Paul Evans <leonerd@leonerd.org.uk>'
 abstract: flow control structures in Continuation-Passing Style
@@ -9,11 +9,19 @@ resources:
   license: http://dev.perl.org/licenses/
 build_requires:
   Test::More: 0
+configure_requires:
+  Module::Build: 0.35
 provides:
   CPS:
     file: lib/CPS.pm
-    version: 0.04
-generated_by: Module::Build version 0.33
+    version: 0.05
+  CPS::Governor:
+    file: lib/CPS/Governor.pm
+    version: 0.05
+  CPS::Governor::Simple:
+    file: lib/CPS/Governor/Simple.pm
+    version: 0.05
+generated_by: Module::Build version 0.35
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
