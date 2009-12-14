@@ -10,7 +10,7 @@ use warnings;
 
 use base qw( CPS::Governor );
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 =head1 NAME
 
@@ -24,7 +24,12 @@ C<CPS::Governor::Simple> - iterate immediately as fast as possible
  my $gov = CPS::Governor::Simple->new;
 
  gkforeach( $gov, [ 1 .. 10 ],
-    sub { print "$_[0]\n"; goto &{$_[1]} },
+    sub { 
+       my ( $item, $knext ) = @_;
+
+       print "$item\n";
+       goto &$knext;
+    },
     sub {},
  );
 

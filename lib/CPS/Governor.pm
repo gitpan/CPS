@@ -10,7 +10,7 @@ use warnings;
 
 use Carp;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 =head1 NAME
 
@@ -68,6 +68,13 @@ stack does not grow arbitrarily. This can be achieved by, for example:
  @_ = @args;
  goto &$code;
 
+Alternatively, the L<Sub::Call::Tail> may be used to apply syntactic sugar,
+allowing you to write instead:
+
+ use Sub::Call::Tail;
+ ...
+ tail $code->( @args );
+
 =cut
 
 =head1 EXAMPLES
@@ -104,6 +111,16 @@ that calls C<sleep()> between every invocation.
  }
 
 =cut
+
+=head1 SEE ALSO
+
+=over 4
+
+=item *
+
+L<Sub::Call::Tail> - Tail calls for subroutines and methods
+
+=back
 
 =head1 AUTHOR
 

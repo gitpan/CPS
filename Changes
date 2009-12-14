@@ -1,5 +1,9 @@
 Revision history for CPS
 
+0.06    CHANGES:
+         * Created CPS::Governor::Deferred
+         * Use Sub::Name to correctly name the gkwhile iteration closure
+
 0.05    CHANGES:
          * Added kdescendd() and kdescendb()
          * (Hopefully) work on perl 5.6 again

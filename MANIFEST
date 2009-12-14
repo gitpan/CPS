@@ -2,12 +2,14 @@ Build.PL
 Changes
 lib/CPS.pm
 lib/CPS/Governor.pm
+lib/CPS/Governor/Deferred.pm
 lib/CPS/Governor/Simple.pm
 LICENSE
 Makefile.PL
 MANIFEST			This list of files
 META.yml
 README
+readme.url
 t/00use.t
 t/01kwhile.t
 t/02kforeach.t
@@ -18,6 +20,9 @@ t/06kgenerate.t
 t/07kdescend.t
 t/10liftk.t
 t/11dropk.t
-t/20leakcheck.t
+t/20governor-simple.t
+t/21governor-deferred.t
 t/30governor.t
+t/31caller.t
+t/32leakcheck.t
 t/99pod.t

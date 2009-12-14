@@ -7,10 +7,11 @@ my $build = Module::Build->new
   (
    module_name => 'CPS',
    requires => {
-               },
+      'Sub::Name' => 0,
+   },
    build_requires => {
-                 'Test::More' => 0,
-               },
+      'Test::More' => 0,
+   },
    license => 'perl',
    create_makefile_pl => 'traditional',
    create_license => 1,

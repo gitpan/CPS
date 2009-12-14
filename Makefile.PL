@@ -5,6 +5,7 @@ WriteMakefile
           'NAME' => 'CPS',
           'VERSION_FROM' => 'lib/CPS.pm',
           'PREREQ_PM' => {
+                           'Sub::Name' => 0,
                            'Test::More' => 0
                          },
           'INSTALLDIRS' => 'site',

@@ -8,11 +8,12 @@ package CPS;
 use strict;
 use warnings;
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 use Carp;
 
 use Scalar::Util qw( weaken );
+use Sub::Name;
 
 use base qw( Exporter );
 
@@ -147,7 +148,7 @@ sub gkwhile
    # Instead, keep a reference to the actual method so we can goto &$again
    my $again = $gov->can('again') or croak "Governor cannot ->again";
 
-   my $iter; $iter = sub {
+   my $iter; $iter = subname gkwhile => sub {
       my $knext = $iter;
 
       $sync = 1;
@@ -558,7 +559,7 @@ the speed of iteration of the loop.
 
    foreach my $prim ( @CPS_PRIMS  ) {
       my $func = \&{"g$prim"};
-      *{$prim} = sub {
+      *{$prim} = subname $prim => sub {
          unshift @_, $default_gov;
          goto &$func;
       };
