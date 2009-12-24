@@ -8,7 +8,7 @@ package CPS;
 use strict;
 use warnings;
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 use Carp;
 
@@ -157,7 +157,7 @@ sub gkwhile
             if( $sync ) { $do_again=1 }
             else        { @_ = ( $gov, $knext ); goto &$again; }
          },
-         sub { undef $again; goto &$k },
+         sub { undef $iter; goto &$k },
       );
       $sync = 0;
 
@@ -804,6 +804,27 @@ problem:
 Admittedly the closure creation somewhat clouds the point in this small
 example, but in a larger example, the real problem-solving logic would be
 larger, and stand out more clearly against the background boilerplate.
+
+=head1 BUGS
+
+=over 4
+
+=item *
+
+C<kwhile> is implemented using a cyclic code reference; an anonymous
+function whose pad contains a reference to itself. This reference is
+stored weakly, using C<Scalar::Util::weaken>.
+
+On perl C<5.8.0> and later, this is correctly destroyed if the body function
+fails to invoke or store either of its continuations; the body stalls and
+fails to execute again, and any references it uniquely held are cleaned up.
+
+On earlier perls (i.e. C<5.6.2> or earlier) this does not happen. In order not
+to leak references on early perls it is essential that the body of the
+C<kwhile> loop, or other functions, always either invokes one of its passed
+continuations, or stores one somewhere for eventual invocation.
+
+=back
 
 =head1 SEE ALSO
 

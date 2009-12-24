@@ -424,6 +424,22 @@ EXAMPLES
     be larger, and stand out more clearly against the background
     boilerplate.
 
+BUGS
+    *   "kwhile" is implemented using a cyclic code reference; an anonymous
+        function whose pad contains a reference to itself. This reference is
+        stored weakly, using "Scalar::Util::weaken".
+
+        On perl 5.8.0 and later, this is correctly destroyed if the body
+        function fails to invoke or store either of its continuations; the
+        body stalls and fails to execute again, and any references it
+        uniquely held are cleaned up.
+
+        On earlier perls (i.e. 5.6.2 or earlier) this does not happen. In
+        order not to leak references on early perls it is essential that the
+        body of the "kwhile" loop, or other functions, always either invokes
+        one of its passed continuations, or stores one somewhere for
+        eventual invocation.
+
 SEE ALSO
     *   <http://en.wikipedia.org/wiki/Continuation-passing_style> on
         wikipedia
