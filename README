@@ -208,6 +208,21 @@ FUNCTIONS
     child node of the parent, before iterating over all of these nodes's
     children, recursively until the bottom of the tree.
 
+  kpar( @bodies, $k )
+    This CPS function takes a list of function bodies and calls them all.
+    Each is given a continuation to invoke. Once every body has invoked its
+    continuation, the main continuation $k is invoked.
+
+     $body->( $kdone )
+       $kdone->()
+
+     $k->()
+
+    This allows running multiple operations in parallel, and waiting for
+    them all to complete before continuing. It provides in a CPS form
+    functionallity similar to that provided in a more object-oriented
+    fashion by modules such as Async::MergePoint or Event::Join.
+
 GOVERNORS
     All of the above functions are implemented using a loop which repeatedly
     calls the body function until some terminating condition. By controlling
@@ -423,6 +438,29 @@ EXAMPLES
     example, but in a larger example, the real problem-solving logic would
     be larger, and stand out more clearly against the background
     boilerplate.
+
+  Passing Values Using "kpar"
+    No facilities are provided to pass data between body and final
+    continuations of "kpar". Instead, normal lexical variable capture may be
+    used here.
+
+     my $bat;
+     my $ball;
+
+     kpar(
+        sub {
+           my ( $k ) = @_;
+           get_bat( on_bat => sub { $bat = shift; goto &$k } );
+        },
+        sub {
+           my ( $k ) = @_;
+           serve_ball( on_ball => sub { $ball = shift; goto &$k } );
+        },
+
+        sub {
+           $bat->hit( $ball );
+        },
+     );
 
 BUGS
     *   "kwhile" is implemented using a cyclic code reference; an anonymous

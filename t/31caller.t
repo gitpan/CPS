@@ -2,9 +2,16 @@
 
 use strict;
 
-use Test::More tests => 3;
+use Test::More;
+
+BEGIN {
+   eval { require Sub::Name } or
+      plan skip_all => "No Sub::Name";
+}
 
 use CPS qw( kwhile kforeach gkforeach );
+
+plan tests => 3;
 
 sub callers
 {

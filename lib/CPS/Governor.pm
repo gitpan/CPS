@@ -10,7 +10,7 @@ use warnings;
 
 use Carp;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 =head1 NAME
 
@@ -44,6 +44,14 @@ sub new
    my $class = shift;
    $class->can( "again" ) or croak "Expected to be class that can ->again";
    return bless {}, $class;
+}
+
+# We're using this internally in gkpar() but not documenting it currently.
+# Details are still experimental.
+sub enter
+{
+   my $self = shift;
+   $self->again( @_ );
 }
 
 # Keep perl happy; keep Britain tidy

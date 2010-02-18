@@ -2,7 +2,7 @@
 
 use strict;
 
-use Test::More tests => 4;
+use Test::More tests => 6;
 
 use CPS::Governor::Simple;
 
@@ -19,3 +19,12 @@ is( $called, 1, '$called is 1 after $gov->again' );
 $gov->again( sub { $called = shift }, 3 );
 
 is( $called, 3, '$called is 3 after $gov->again with arguments' );
+
+my $poke;
+$gov->enter( sub { $called = shift; $poke = shift; }, 4, sub { $called = 5 } );
+
+is( $called, 4, '$called is 4 after $gov->enter storing kleave' );
+
+$poke->();
+
+is( $called, 5, '$called is 5 after invoking stored kleave' );

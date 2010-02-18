@@ -1,5 +1,10 @@
 Revision history for CPS
 
+0.08    CHANGES:
+         * Added kpar()
+         * Only opportunisticly use Sub::Name, don't hard-depend on it in case
+           of pure-perl scenarios
+
 0.07    CHANGES:
          * Added note about perl before 5.8 not implementing weaken properly,
            so possible memory leaks if gkwhile()'s continuations are lost

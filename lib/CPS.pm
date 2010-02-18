@@ -1,21 +1,20 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2008,2009 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2008-2010 -- leonerd@leonerd.org.uk
 
 package CPS;
 
 use strict;
 use warnings;
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 
 use Carp;
 
 use Scalar::Util qw( weaken );
-use Sub::Name;
 
-use base qw( Exporter );
+use Exporter 'import';
 
 our @CPS_PRIMS = qw(
    kwhile
@@ -25,6 +24,8 @@ our @CPS_PRIMS = qw(
    kfoldl kfoldr
    kgenerate
    kdescendd kdescendb
+
+   kpar
 );
 
 our @EXPORT_OK = (
@@ -38,6 +39,17 @@ qw(
 );
 
 use CPS::Governor::Simple;
+
+# Don't hard-depend on Sub::Name since it's only a niceness for stack traces
+BEGIN {
+   if( eval { require Sub::Name } ) {
+      *subname = \&Sub::Name::subname;
+   }
+   else {
+      # Ignore the name, return the CODEref
+      *subname = sub { return $_[1] };
+   }
+}
 
 =head1 NAME
 
@@ -523,6 +535,51 @@ sub gkdescendb
    );
 }
 
+=head2 kpar( @bodies, $k )
+
+This CPS function takes a list of function bodies and calls them all. Each is
+given a continuation to invoke. Once every body has invoked its continuation,
+the main continuation C<$k> is invoked.
+
+ $body->( $kdone )
+   $kdone->()
+
+ $k->()
+
+This allows running multiple operations in parallel, and waiting for them all
+to complete before continuing. It provides in a CPS form functionallity
+similar to that provided in a more object-oriented fashion by modules such as
+L<Async::MergePoint> or L<Event::Join>.
+
+=cut
+
+sub gkpar
+{
+   my ( $gov, @bodies ) = @_;
+   my $k = pop @bodies;
+
+   $gov->can('enter') or croak "Governor cannot ->enter";
+
+   my $sync = 1;
+   my @outstanding;
+   my $kdone = sub {
+      return if $sync;
+      $_ and return for @outstanding;
+      goto &$k;
+   };
+
+   foreach my $idx ( 0 .. $#bodies ) {
+      $outstanding[$idx]++;
+      $gov->enter( $bodies[$idx], sub {
+         $outstanding[$idx]--;
+         goto &$kdone;
+      } );
+   }
+
+   $sync = 0;
+   goto &$kdone;
+}
+
 =head1 GOVERNORS
 
 All of the above functions are implemented using a loop which repeatedly calls
@@ -804,6 +861,29 @@ problem:
 Admittedly the closure creation somewhat clouds the point in this small
 example, but in a larger example, the real problem-solving logic would be
 larger, and stand out more clearly against the background boilerplate.
+
+=head2 Passing Values Using C<kpar>
+
+No facilities are provided to pass data between body and final continuations
+of C<kpar>. Instead, normal lexical variable capture may be used here.
+
+ my $bat;
+ my $ball;
+
+ kpar(
+    sub {
+       my ( $k ) = @_;
+       get_bat( on_bat => sub { $bat = shift; goto &$k } );
+    },
+    sub {
+       my ( $k ) = @_;
+       serve_ball( on_ball => sub { $ball = shift; goto &$k } );
+    },
+
+    sub {
+       $bat->hit( $ball );
+    },
+ );
 
 =head1 BUGS
 

@@ -6,7 +6,7 @@ use Module::Build;
 my $build = Module::Build->new
   (
    module_name => 'CPS',
-   requires => {
+   recommends => {
       'Sub::Name' => 0,
    },
    build_requires => {

@@ -1,32 +1,32 @@
 ---
-name: CPS
-version: 0.07
+abstract: 'flow control structures in Continuation-Passing Style'
 author:
   - 'Paul Evans <leonerd@leonerd.org.uk>'
-abstract: flow control structures in Continuation-Passing Style
-license: perl
-resources:
-  license: http://dev.perl.org/licenses/
 build_requires:
   Test::More: 0
-requires:
-  Sub::Name: 0
 configure_requires:
-  Module::Build: 0.35
-provides:
-  CPS:
-    file: lib/CPS.pm
-    version: 0.07
-  CPS::Governor:
-    file: lib/CPS/Governor.pm
-    version: 0.07
-  CPS::Governor::Deferred:
-    file: lib/CPS/Governor/Deferred.pm
-    version: 0.07
-  CPS::Governor::Simple:
-    file: lib/CPS/Governor/Simple.pm
-    version: 0.07
-generated_by: Module::Build version 0.35
+  Module::Build: 0.36
+generated_by: 'Module::Build version 0.3601'
+license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
   version: 1.4
+name: CPS
+provides:
+  CPS:
+    file: lib/CPS.pm
+    version: 0.08
+  CPS::Governor:
+    file: lib/CPS/Governor.pm
+    version: 0.08
+  CPS::Governor::Deferred:
+    file: lib/CPS/Governor/Deferred.pm
+    version: 0.08
+  CPS::Governor::Simple:
+    file: lib/CPS/Governor/Simple.pm
+    version: 0.08
+recommends:
+  Sub::Name: 0
+resources:
+  license: http://dev.perl.org/licenses/
+version: 0.08

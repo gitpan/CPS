@@ -24,4 +24,5 @@ t/21governor-deferred.t
 t/30governor.t
 t/31caller.t
 t/32leakcheck.t
+t/40kpar.t
 t/99pod.t
