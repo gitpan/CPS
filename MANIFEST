@@ -1,5 +1,6 @@
 Build.PL
 Changes
+examples/kforeach.pl
 lib/CPS.pm
 lib/CPS/Governor.pm
 lib/CPS/Governor/Deferred.pm
@@ -25,4 +26,5 @@ t/30governor.t
 t/31caller.t
 t/32leakcheck.t
 t/40kpar.t
+t/41kseq.t
 t/99pod.t

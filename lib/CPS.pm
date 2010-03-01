@@ -8,7 +8,7 @@ package CPS;
 use strict;
 use warnings;
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 use Carp;
 
@@ -26,6 +26,7 @@ our @CPS_PRIMS = qw(
    kdescendd kdescendb
 
    kpar
+   kseq
 );
 
 our @EXPORT_OK = (
@@ -537,9 +538,9 @@ sub gkdescendb
 
 =head2 kpar( @bodies, $k )
 
-This CPS function takes a list of function bodies and calls them all. Each is
-given a continuation to invoke. Once every body has invoked its continuation,
-the main continuation C<$k> is invoked.
+This CPS function takes a list of function bodies and calls them all
+immediately. Each is given a continuation to invoke. Once every body has
+invoked its continuation, the main continuation C<$k> is invoked.
 
  $body->( $kdone )
    $kdone->()
@@ -578,6 +579,46 @@ sub gkpar
 
    $sync = 0;
    goto &$kdone;
+}
+
+=head2 kseq( @bodies, $k )
+
+This CPS function takes a list of function bodies and calls them each, one at
+a time in sequence. Each is given a continuation to invoke, which will cause
+the next body to be invoked. When the last body has invoked its continuation,
+the main continuation C<$k> is invoked.
+
+ $body->( $kdone )
+   $kdone->()
+
+ $k->()
+
+A benefit of this is that it allows a long operation that uses many
+continuation "pauses", to be written without code indenting further and
+further to the right. Another is that it allows easy skipping of conditional
+parts of a computation, which would otherwise be tricky to write in a CPS
+form. See the EXAMPLES section.
+
+=cut
+
+sub gkseq
+{
+   my ( $gov, @bodies ) = @_;
+   my $k = pop @bodies;
+
+   my $enter = $gov->can('enter') or croak "Governor cannot ->enter";
+
+   while( @bodies ) {
+      my $nextk = $k;
+      my $b = pop @bodies;
+      $k = sub {
+         @_ = ( $gov, $b, $nextk );
+         goto &$enter;
+      };
+   }
+
+   @_ = ();
+   goto &$k;
 }
 
 =head1 GOVERNORS
@@ -862,10 +903,11 @@ Admittedly the closure creation somewhat clouds the point in this small
 example, but in a larger example, the real problem-solving logic would be
 larger, and stand out more clearly against the background boilerplate.
 
-=head2 Passing Values Using C<kpar>
+=head2 Passing Values Using C<kpar> Or C<kseq>
 
 No facilities are provided to pass data between body and final continuations
-of C<kpar>. Instead, normal lexical variable capture may be used here.
+of C<kpar> or C<kseq>. Instead, normal lexical variable capture may be used
+here.
 
  my $bat;
  my $ball;
@@ -885,11 +927,39 @@ of C<kpar>. Instead, normal lexical variable capture may be used here.
     },
  );
 
-=head1 BUGS
+=head2 Using C<kseq> for conditionals
 
-=over 4
+Consider the call/return style of code
 
-=item *
+ A();
+ if( $maybe ) {
+    B();
+ }
+ C();
+
+We cannot easily write this in CPS form without naming C twice
+
+ kA( sub {
+    $maybe ?
+       kB( sub { kC() } ) :
+       kC();
+ } );
+
+While not so problematic here, it could get awkward if C were in fact a large
+code block, or if more than a single conditional were employed in the logic; a
+likely scenario. A further issue is that the logical structure becomes much
+harder to read.
+
+Using C<kseq> allows us to name the continuation so each arm of C<kmaybe> can
+invoke it indirectly.
+
+ kseq(
+    \&kA,
+    sub { my $k = shift; $maybe ? kB( $k ) : goto &$k; },
+    \&kC
+ );
+
+=head1 NOTE FOR PERL 5.6 OR EARLIER
 
 C<kwhile> is implemented using a cyclic code reference; an anonymous
 function whose pad contains a reference to itself. This reference is
@@ -897,14 +967,14 @@ stored weakly, using C<Scalar::Util::weaken>.
 
 On perl C<5.8.0> and later, this is correctly destroyed if the body function
 fails to invoke or store either of its continuations; the body stalls and
-fails to execute again, and any references it uniquely held are cleaned up.
+fails to execute again, and any references it uniquely held are garbage
+collected.
 
-On earlier perls (i.e. C<5.6.2> or earlier) this does not happen. In order not
-to leak references on early perls it is essential that the body of the
-C<kwhile> loop, or other functions, always either invokes one of its passed
-continuations, or stores one somewhere for eventual invocation.
-
-=back
+On earlier versions of perl (i.e. C<5.6.2> or earlier) this does not happen.
+In order not to leak references on versions prior to C<5.8> it is essential
+that the body of the C<kwhile> loop, or other functions, always either
+invokes one of its passed continuations, or stores one somewhere for eventual
+invocation.
 
 =head1 SEE ALSO
 

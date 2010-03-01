@@ -1,5 +1,10 @@
 Revision history for CPS
 
+0.09    CHANGES:
+         * Added kseq()
+         * Minor documentation updates
+         * Skip t/32leakcheck.t before perl version 5.8.0
+
 0.08    CHANGES:
          * Added kpar()
          * Only opportunisticly use Sub::Name, don't hard-depend on it in case

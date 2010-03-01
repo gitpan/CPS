@@ -209,9 +209,9 @@ FUNCTIONS
     children, recursively until the bottom of the tree.
 
   kpar( @bodies, $k )
-    This CPS function takes a list of function bodies and calls them all.
-    Each is given a continuation to invoke. Once every body has invoked its
-    continuation, the main continuation $k is invoked.
+    This CPS function takes a list of function bodies and calls them all
+    immediately. Each is given a continuation to invoke. Once every body has
+    invoked its continuation, the main continuation $k is invoked.
 
      $body->( $kdone )
        $kdone->()
@@ -222,6 +222,23 @@ FUNCTIONS
     them all to complete before continuing. It provides in a CPS form
     functionallity similar to that provided in a more object-oriented
     fashion by modules such as Async::MergePoint or Event::Join.
+
+  kseq( @bodies, $k )
+    This CPS function takes a list of function bodies and calls them each,
+    one at a time in sequence. Each is given a continuation to invoke, which
+    will cause the next body to be invoked. When the last body has invoked
+    its continuation, the main continuation $k is invoked.
+
+     $body->( $kdone )
+       $kdone->()
+
+     $k->()
+
+    A benefit of this is that it allows a long operation that uses many
+    continuation "pauses", to be written without code indenting further and
+    further to the right. Another is that it allows easy skipping of
+    conditional parts of a computation, which would otherwise be tricky to
+    write in a CPS form. See the EXAMPLES section.
 
 GOVERNORS
     All of the above functions are implemented using a loop which repeatedly
@@ -439,10 +456,10 @@ EXAMPLES
     be larger, and stand out more clearly against the background
     boilerplate.
 
-  Passing Values Using "kpar"
+  Passing Values Using "kpar" Or "kseq"
     No facilities are provided to pass data between body and final
-    continuations of "kpar". Instead, normal lexical variable capture may be
-    used here.
+    continuations of "kpar" or "kseq". Instead, normal lexical variable
+    capture may be used here.
 
      my $bat;
      my $ball;
@@ -462,21 +479,52 @@ EXAMPLES
         },
      );
 
-BUGS
-    *   "kwhile" is implemented using a cyclic code reference; an anonymous
-        function whose pad contains a reference to itself. This reference is
-        stored weakly, using "Scalar::Util::weaken".
+  Using "kseq" for conditionals
+    Consider the call/return style of code
 
-        On perl 5.8.0 and later, this is correctly destroyed if the body
-        function fails to invoke or store either of its continuations; the
-        body stalls and fails to execute again, and any references it
-        uniquely held are cleaned up.
+     A();
+     if( $maybe ) {
+        B();
+     }
+     C();
 
-        On earlier perls (i.e. 5.6.2 or earlier) this does not happen. In
-        order not to leak references on early perls it is essential that the
-        body of the "kwhile" loop, or other functions, always either invokes
-        one of its passed continuations, or stores one somewhere for
-        eventual invocation.
+    We cannot easily write this in CPS form without naming C twice
+
+     kA( sub {
+        $maybe ?
+           kB( sub { kC() } ) :
+           kC();
+     } );
+
+    While not so problematic here, it could get awkward if C were in fact a
+    large code block, or if more than a single conditional were employed in
+    the logic; a likely scenario. A further issue is that the logical
+    structure becomes much harder to read.
+
+    Using "kseq" allows us to name the continuation so each arm of "kmaybe"
+    can invoke it indirectly.
+
+     kseq(
+        \&kA,
+        sub { my $k = shift; $maybe ? kB( $k ) : goto &$k; },
+        \&kC
+     );
+
+NOTE FOR PERL 5.6 OR EARLIER
+    "kwhile" is implemented using a cyclic code reference; an anonymous
+    function whose pad contains a reference to itself. This reference is
+    stored weakly, using "Scalar::Util::weaken".
+
+    On perl 5.8.0 and later, this is correctly destroyed if the body
+    function fails to invoke or store either of its continuations; the body
+    stalls and fails to execute again, and any references it uniquely held
+    are garbage collected.
+
+    On earlier versions of perl (i.e. 5.6.2 or earlier) this does not
+    happen. In order not to leak references on versions prior to 5.8 it is
+    essential that the body of the "kwhile" loop, or other functions, always
+    either invokes one of its passed continuations, or stores one somewhere
+    for eventual invocation.
 
 SEE ALSO
     *   <http://en.wikipedia.org/wiki/Continuation-passing_style> on

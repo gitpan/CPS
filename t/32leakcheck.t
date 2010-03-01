@@ -2,9 +2,16 @@
 
 use strict;
 
-use Test::More tests => 3;
+use Test::More;
 
 use CPS qw( kwhile );
+
+if( $] < 5.008 ) {
+   plan skip_all => "weaken() doesn't work before 5.8";
+}
+else {
+   plan tests => 3;
+}
 
 my $destroycount = 0;
 

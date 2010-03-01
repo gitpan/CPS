@@ -10,7 +10,7 @@ use warnings;
 
 use base qw( CPS::Governor );
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 =head1 NAME
 
