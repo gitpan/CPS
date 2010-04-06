@@ -2,7 +2,7 @@
 
 use strict;
 
-use Test::More tests => 6;
+use Test::More tests => 7;
 
 use CPS qw( kwhile );
 
@@ -55,3 +55,16 @@ kwhile(
 );
 
 is_deeply( \@nums, [ 3, 4, "finished" ], 'kwhile sync - @nums initially' );
+
+my @result;
+kwhile(
+   sub {
+      my ( $knext, $klast ) = @_;
+      $klast->( 1, 2, 3 );
+   },
+   sub {
+      push @result, @_;
+   }
+);
+
+is_deeply( \@result, [], 'kwhile clears @_ in $klast' );

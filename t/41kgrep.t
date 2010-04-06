@@ -4,21 +4,21 @@ use strict;
 
 use Test::More tests => 1;
 
-use CPS qw( kmap );
+use CPS::Functional qw( kgrep );
 
 my @nums;
 
-kmap(
-   [ 1, 2, 3 ],
+kgrep(
+   [ 1, 2, 3, 4 ],
    sub {
       my ( $item, $k ) = @_;
-      $k->( $item * 2 );
+      $k->( $item % 2 == 0 );
    },
    sub {
       @nums = @_;
    },
 );
 
-is_deeply( \@nums, [ 2, 4, 6 ], 'kmap sync - @nums' );
+is_deeply( \@nums, [ 2, 4 ], 'kgrep sync - @nums' );
 
 @nums = ();

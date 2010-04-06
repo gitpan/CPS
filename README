@@ -1,5 +1,5 @@
 NAME
-    "CPS" - flow control structures in Continuation-Passing Style
+    `CPS' - manage flow of control in Continuation-Passing Style
 
 OVERVIEW
     The functions in this module implement or assist the writing of
@@ -31,6 +31,17 @@ OVERVIEW
      read_stdin_line( \&on_line ); # wait on a line from STDIN, then pass it
                                    # to the handler function
 
+    This module itself provides functions that manage the flow of control
+    through a continuation passing program. They do not directly facilitate
+    the flow of data through a program. That can be managed by lexical
+    variables captured by the closures passed around. See the EXAMPLES
+    section.
+
+    For CPS versions of data-flow functionals, such as `map' and `grep', see
+    also CPS::Functional. For backward compatibility with previous versions,
+    the functions in `CPS::Functional' are also exported here; and `kunfold'
+    is renamed to `kgenerate'. This may be removed in a later version.
+
 SYNOPSIS
      use CPS qw( kwhile );
 
@@ -60,20 +71,20 @@ SYNOPSIS
      );
 
 FUNCTIONS
-    In all of the following functions, the "\&body" function can provide
+    In all of the following functions, the `\&body' function can provide
     results by invoking its continuation / one of its continuations, either
     synchronously or asynchronously at some point later (via some event
-    handling or other mechanism); the next invocation of "\&body" will not
+    handling or other mechanism); the next invocation of `\&body' will not
     take place until the previous one exits if it is done synchronously.
 
-    They all take the prefix "k" before the name of the regular perl keyword
+    They all take the prefix `k' before the name of the regular perl keyword
     or function they aim to replace. It is common in CPS code in other
     languages, such as Scheme or Haskell, to store a continuation in a
-    variable called "k". This convention is followed here.
+    variable called `k'. This convention is followed here.
 
   kwhile( \&body, $k )
-    CPS version of perl's "while" loop. Repeatedly calls the "body" code
-    until it indicates the end of the loop, then invoke $k.
+    CPS version of perl's `while' loop. Repeatedly calls the `body' code
+    until it indicates the end of the loop, then invoke `$k'.
 
      $body->( $knext, $klast )
         $knext->()
@@ -81,13 +92,13 @@ FUNCTIONS
 
      $k->()
 
-    If $knext is invoked, the body will be called again. If $klast is
-    invoked, the continuation $k is invoked.
+    If `$knext' is invoked, the body will be called again. If `$klast' is
+    invoked, the continuation `$k' is invoked.
 
   kforeach( \@items, \&body, $k )
-    CPS version of perl's "foreach" loop. Calls the "body" code once for
-    each element in @items, until either the items are exhausted or the
-    "body" invokes its $klast continuation, then invoke $k.
+    CPS version of perl's `foreach' loop. Calls the `body' code once for
+    each element in `@items', until either the items are exhausted or the
+    `body' invokes its `$klast' continuation, then invoke `$k'.
 
      $body->( $item, $knext, $klast )
         $knext->()
@@ -95,93 +106,9 @@ FUNCTIONS
 
      $k->()
 
-  kmap( \@items, \&body, $k )
-    CPS version of perl's "map" statement. Calls the "body" code once for
-    each element in @items, capturing the list of values the body passes
-    into its continuation. When the items are exhausted, $k is invoked and
-    passed a list of all the collected values.
-
-     $body->( $item, $kret )
-        $kret->( @items_out )
-
-     $k->( @all_items_out )
-
-  kgrep( \@items, \&body, $k )
-    CPS version of perl's "grep" statement. Calls the "body" code once for
-    each element in @items, capturing those elements where the body's
-    continuation was invoked with a true value. When the items are
-    exhausted, $k is invoked and passed a list of the subset of @items which
-    were selected.
-
-     $body->( $item, $kret )
-        $kret->( $select )
-
-     $k->( @chosen_items )
-
-  kfoldl( \@items, \&body, $k )
-    CPS version of "List::Util::reduce", which collapses (or "folds") a list
-    of values down to a single scalar, by successively accumulating values
-    together.
-
-    If @items is empty, invokes $k immediately, passing in "undef".
-
-    If @items contains a single value, invokes $k immediately, passing in
-    just that single value.
-
-    Otherwise, initialises an accumulator variable with the first value in
-    @items, then for each additional item, invokes the "body" passing in the
-    accumulator and the next item, storing back into the accumulator the
-    value that "body" passed to its continuation. When the @items are
-    exhausted, it invokes $k, passing in the final value of the accumulator.
-
-     $body->( $acc, $item, $kret )
-        $kret->( $new_acc )
-
-     $k->( $final_acc )
-
-    Technically, this is not a true Scheme/Haskell-style "foldl", as it does
-    not take an initial value. (It is what Haskell calls "foldl1".) However,
-    if such an initial value is required, this can be provided by
-
-     kfoldl( [ $initial, @items ], \&body, $k )
-
-  kfoldr( \@items, \&body, $k )
-    A right-associative version of "kfoldl()". Where "kfoldl()" starts with
-    the first two elements in @items and works forward, "kfoldr()" starts
-    with the last two and works backward.
-
-     $body->( $item, $acc, $kret )
-        $kret->( $new_acc )
-
-     $k->( $final_acc )
-
-    As before, an initial value can be provided by modifying the @items
-    array, though note it has to be last this time:
-
-     kfoldr( [ @items, $initial ], \&body, $k )
-
-  kgenerate( $seed, \&body, $k )
-    An inverse operation to "kfoldl()"; turns a single scalar into a list of
-    items. Repeatedly calls the "body" code, capturing the values it
-    generates, until it indicates the end of the loop, then invoke $k with
-    the collected values.
-
-     $body->( $seed, $kmore, $kdone )
-        $kmore->( $new_seed, @items )
-        $kdone->( @items )
-
-     $k->( @all_items )
-
-    With each iteration, the "body" is invoked and passed the current $seed
-    value and two continuations, $kmore and $kdone. If $kmore is invoked,
-    the passed items, if any, are appended to the eventual result list. The
-    "body" is then re-invoked with the new $seed value. If $klast is
-    invoked, the passed items, if any, are appended to the return list, then
-    the entire list is passed to $k.
-
   kdescendd( $root, \&body, $k )
     CPS version of recursive descent on a tree-like structure, defined by a
-    function, "body", which when given a node in the tree, yields a list of
+    function, `body', which when given a node in the tree, yields a list of
     child nodes.
 
      $body->( $node, $kmore )
@@ -189,10 +116,10 @@ FUNCTIONS
 
      $k->()
 
-    The first value to be passed into "body" is $root.
+    The first value to be passed into `body' is `$root'.
 
-    At each iteration, a node is given to the "body" function, and it is
-    expected to pass a list of child nodes into its $kmore continuation.
+    At each iteration, a node is given to the `body' function, and it is
+    expected to pass a list of child nodes into its `$kmore' continuation.
     These will then be iterated over, in the order given. The tree-like
     structure is visited depth-first, descending fully into one subtree of a
     node before moving on to the next.
@@ -204,14 +131,14 @@ FUNCTIONS
     body and the continuation if this is required.
 
   kdescendb( $root, \&body, $k )
-    A breadth-first variation of "kdescendd". This function visits each
+    A breadth-first variation of `kdescendd'. This function visits each
     child node of the parent, before iterating over all of these nodes's
     children, recursively until the bottom of the tree.
 
   kpar( @bodies, $k )
     This CPS function takes a list of function bodies and calls them all
     immediately. Each is given a continuation to invoke. Once every body has
-    invoked its continuation, the main continuation $k is invoked.
+    invoked its continuation, the main continuation `$k' is invoked.
 
      $body->( $kdone )
        $kdone->()
@@ -227,7 +154,7 @@ FUNCTIONS
     This CPS function takes a list of function bodies and calls them each,
     one at a time in sequence. Each is given a continuation to invoke, which
     will cause the next body to be invoked. When the last body has invoked
-    its continuation, the main continuation $k is invoked.
+    its continuation, the main continuation `$k' is invoked.
 
      $body->( $kdone )
        $kdone->()
@@ -264,16 +191,16 @@ GOVERNORS
     rate-limitation control on the speed of iteration of the loop.
 
 CPS UTILITIES
-    These function names do not begin with "k" because they are not
+    These function names do not begin with `k' because they are not
     themselves CPS primatives, but may be useful in CPS-oriented code.
 
   $kfunc = liftk { BLOCK }
   $kfunc = liftk( \&func )
     Returns a new CODE reference to a CPS-wrapped version of the code block
-    or passed CODE reference. When $kfunc is invoked, the function &func is
-    called in list context, being passed all the arguments given to $kfunc
-    apart from the last, expected to be its continuation. When &func
-    returns, the result is passed into the continuation.
+    or passed CODE reference. When `$kfunc' is invoked, the function `&func'
+    is called in list context, being passed all the arguments given to
+    `$kfunc' apart from the last, expected to be its continuation. When
+    `&func' returns, the result is passed into the continuation.
 
      $kfunc->( @func_args, $k )
         $k->( @func_ret )
@@ -287,7 +214,7 @@ CPS UTILITIES
 
     Note that the returned wrapper function only has one continuation slot
     in its arguments. It therefore cannot be used as the body for
-    "kwhile()", "kforeach()" or "kgenerate()", because these pass two
+    `kwhile()', `kforeach()' or `kgenerate()', because these pass two
     continuations. There does not exist a "natural" way to lift a normal
     call/return function into a CPS function which requires more than one
     continuation, because there is no way to distinguish the different named
@@ -322,7 +249,7 @@ CPS UTILITIES
 
     In the general case the CPS function hasn't yet invoked its continuation
     by the time it returns (such as would be the case when using any sort of
-    asynchronisation or event-driven framework). For "dropk" to actually
+    asynchronisation or event-driven framework). For `dropk' to actually
     work in this situation, it requires a way to run the event framework, to
     cause it to process events until the continuation has been invoked.
 
@@ -331,135 +258,10 @@ CPS UTILITIES
     function, until the CPS function has invoked its continuation.
 
 EXAMPLES
-    The following aren't necessarily examples of code which would be found
-    in real programs, but instead, demonstrations of how to use the above
-    functions as ways of controlling program flow.
-
-    Without dragging in large amount of detail on an asynchronous or
-    event-driven framework, it is difficult to give a useful example of
-    behaviour that CPS allows that couldn't be done just as easily without.
-    Nevertheless, I hope the following examples will be useful to
-    demonstrate use of the above functions, in a way which hints at their
-    use in a real program.
-
-  Implementing "join()" using "kfoldl()"
-     use CPS qw( kfoldl );
-
-     my @words = qw( My message here );
-
-     kfoldl(
-        \@words,
-        sub {
-           my ( $left, $right, $k ) = @_;
-
-           $k->( "$left $right" );
-        },
-        sub {
-           my ( $str ) = @_;
-
-           print "Joined up words: $str\n";
-        }
-     );
-
-  Implementing "split()" using "kgenerate()"
-    The following program illustrates the way that "kgenerate()" can split a
-    string, in a reverse way to the way "kfoldl()" can join it.
-
-     use CPS qw( kgenerate );
-
-     my $str = "My message here";
-
-     kgenerate(
-        $str,
-        sub {
-           my ( $s, $kmore, $kdone ) = @_;
-
-           if( $s =~ s/^(.*?) // ) {
-              return $kmore->( $s, $1 );
-           }
-           else {
-              return $kdone->( $s );
-           }
-        },
-        sub {
-           my @words = @_;
-           print "Words in message:\n";
-           print "$_\n" for @words;
-        }
-     );
-
-  Generating Prime Numbers
-    While the design of "kgenerate()" is symmetric to "kfoldl()", the seed
-    value doesn't have to be successively broken apart into pieces. Another
-    valid use for it may be storing intermediate values in computation, such
-    as in this example, storing a list of known primes, to help generate the
-    next one:
-
-     use CPS qw( kgenerate );
- 
-     kgenerate(
-        [ 2, 3 ],
-        sub {
-           my ( $vals, $kmore, $kdone ) = @_;
- 
-           return $kdone->() if @$vals >= 50;
- 
-           PRIME: for( my $n = $vals->[-1] + 2; ; $n += 2 ) {
-              $n % $_ == 0 and next PRIME for @$vals;
- 
-              push @$vals, $n;
-              return $kmore->( $vals, $n );
-           }
-        },
-        sub {
-           my @primes = ( 2, 3, @_ );
-           print "Primes are @primes\n";
-        }
-     );
-
-  Forward-reading Program Flow
-    One side benefit of the CPS control-flow methods which is unassociated
-    with asynchronous operation, is that the flow of data reads in a more
-    natural left-to-right direction, instead of the right-to-left flow in
-    functional style. Compare
-
-     sub square { $_ * $_ }
-     sub add { $a + $b }
-
-     print reduce( \&add, map( square, primes(10) ) );
-
-    (because "map" is a language builtin but "reduce" is a function with
-    "(&)" prototype, it has a different way to pass in the named functions)
-
-    with
-
-     my $ksquare = liftk { $_[0] * $_[0] };
-     my $kadd = liftk { $_[0] + $_[1] };
-
-     kprimes 10, sub {
-        kmap \@_, $ksquare, sub {
-           kfoldl \@_, $kadd, sub {
-              print $_[0];
-           }
-        }
-     };
-
-    This translates roughly to a functional vs imperative way to describe
-    the problem:
-
-     Print the sum of the squares of the first 10 primes.
-
-     Take the first 10 primes. Square them. Sum them. Print.
-
-    Admittedly the closure creation somewhat clouds the point in this small
-    example, but in a larger example, the real problem-solving logic would
-    be larger, and stand out more clearly against the background
-    boilerplate.
-
-  Passing Values Using "kpar" Or "kseq"
-    No facilities are provided to pass data between body and final
-    continuations of "kpar" or "kseq". Instead, normal lexical variable
-    capture may be used here.
+  Returning Data From Functions
+    No facilities are provided directly to return data from CPS body
+    functions in `kwhile', `kpar' and `kseq'. Instead, normal lexical
+    variable capture may be used here.
 
      my $bat;
      my $ball;
@@ -479,7 +281,10 @@ EXAMPLES
         },
      );
 
-  Using "kseq" for conditionals
+    The body function can set the value of a variable that it and its final
+    continuation both capture.
+
+  Using `kseq' For Conditionals
     Consider the call/return style of code
 
      A();
@@ -501,7 +306,7 @@ EXAMPLES
     the logic; a likely scenario. A further issue is that the logical
     structure becomes much harder to read.
 
-    Using "kseq" allows us to name the continuation so each arm of "kmaybe"
+    Using `kseq' allows us to name the continuation so each arm of `kmaybe'
     can invoke it indirectly.
 
      kseq(
@@ -510,25 +315,10 @@ EXAMPLES
         \&kC
      );
 
-NOTE FOR PERL 5.6 OR EARLIER
-    "kwhile" is implemented using a cyclic code reference; an anonymous
-    function whose pad contains a reference to itself. This reference is
-    stored weakly, using "Scalar::Util::weaken".
-
-    On perl 5.8.0 and later, this is correctly destroyed if the body
-    function fails to invoke or store either of its continuations; the body
-    stalls and fails to execute again, and any references it uniquely held
-    are garbage collected.
-
-    On earlier versions of perl (i.e. 5.6.2 or earlier) this does not
-    happen. In order not to leak references on versions prior to 5.8 it is
-    essential that the body of the "kwhile" loop, or other functions, always
-    either invokes one of its passed continuations, or stores one somewhere
-    for eventual invocation.
-
 SEE ALSO
-    *   <http://en.wikipedia.org/wiki/Continuation-passing_style> on
-        wikipedia
+    *   CPS::Functional - functional utilities in Continuation-Passing Style
+
+    *   http://en.wikipedia.org/wiki/Continuation-passing_style on wikipedia
 
     *   Coro - co-routines in Perl
 

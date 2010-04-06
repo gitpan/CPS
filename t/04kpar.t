@@ -2,7 +2,7 @@
 
 use strict;
 
-use Test::More tests => 5;
+use Test::More tests => 6;
 
 use CPS qw( kpar );
 
@@ -35,3 +35,15 @@ is( $result, "AB", 'kpar async still unfinished after 1 poke' );
 (shift @pokes)->();
 
 is( $result, "ABC", 'kpar async now finished after 2 pokes' );
+
+my @result;
+kpar(
+   sub {
+      shift->( 1, 2, 3 );
+   },
+   sub {
+      push @result, @_;
+   }
+);
+
+is_deeply( \@result, [], 'kpar clears @_' );

@@ -1,7 +1,7 @@
 Build.PL
 Changes
-examples/kforeach.pl
 lib/CPS.pm
+lib/CPS/Functional.pm
 lib/CPS/Governor.pm
 lib/CPS/Governor/Deferred.pm
 lib/CPS/Governor/Simple.pm
@@ -13,11 +13,9 @@ README
 t/00use.t
 t/01kwhile.t
 t/02kforeach.t
-t/03kmap.t
-t/04kgrep.t
-t/05kfold.t
-t/06kgenerate.t
-t/07kdescend.t
+t/03kdescend.t
+t/04kpar.t
+t/05kseq.t
 t/10liftk.t
 t/11dropk.t
 t/20governor-simple.t
@@ -25,6 +23,9 @@ t/21governor-deferred.t
 t/30governor.t
 t/31caller.t
 t/32leakcheck.t
-t/40kpar.t
-t/41kseq.t
+t/40kmap.t
+t/41kgrep.t
+t/42kfold.t
+t/43kunfold.t
+t/98back-compat.t
 t/99pod.t

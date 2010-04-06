@@ -4,11 +4,11 @@ use strict;
 
 use Test::More tests => 1;
 
-use CPS qw( kgenerate );
+use CPS::Functional qw( kunfold );
 
 my @nums;
 
-kgenerate(
+kunfold(
    1,
    sub {
       my ( $n, $kmore, $kdone ) = @_; 
@@ -25,4 +25,4 @@ kgenerate(
    }
 );
 
-is_deeply( \@nums, [ 1, 2, 3, 4 ], 'kgenerate sync - @nums' );
+is_deeply( \@nums, [ 1, 2, 3, 4 ], 'kunfold sync - @nums' );

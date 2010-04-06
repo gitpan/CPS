@@ -8,21 +8,15 @@ package CPS;
 use strict;
 use warnings;
 
-our $VERSION = '0.09';
+our $VERSION = '0.10';
 
 use Carp;
-
-use Scalar::Util qw( weaken );
 
 use Exporter 'import';
 
 our @CPS_PRIMS = qw(
    kwhile
    kforeach
-   kmap
-   kgrep
-   kfoldl kfoldr
-   kgenerate
    kdescendd kdescendb
 
    kpar
@@ -54,7 +48,7 @@ BEGIN {
 
 =head1 NAME
 
-C<CPS> - flow control structures in Continuation-Passing Style
+C<CPS> - manage flow of control in Continuation-Passing Style
 
 =head1 OVERVIEW
 
@@ -84,6 +78,16 @@ its general intention should be obvious. :)
 
  read_stdin_line( \&on_line ); # wait on a line from STDIN, then pass it
                                # to the handler function
+
+This module itself provides functions that manage the flow of control through
+a continuation passing program. They do not directly facilitate the flow of
+data through a program. That can be managed by lexical variables captured by
+the closures passed around. See the EXAMPLES section.
+
+For CPS versions of data-flow functionals, such as C<map> and C<grep>, see
+also L<CPS::Functional>. For backward compatibility with previous versions,
+the functions in C<CPS::Functional> are also exported here; and C<kunfold>
+is renamed to C<kgenerate>. This may be removed in a later version.
 
 =head1 SYNOPSIS
 
@@ -147,30 +151,34 @@ invoked, the continuation C<$k> is invoked.
 
 =cut
 
+sub _fix
+{
+   my ( $func ) = @_;
+   sub {
+      unshift @_, _fix( $func );
+      goto &$func;
+   };
+}
+
 sub gkwhile
 {
    my ( $gov, $body, $k ) = @_;
-
-   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
-   ref $k  eq "CODE" or croak 'Expected $k as CODE ref';
-
-   my $sync;
-   my $do_again = 0;
 
    # We can't just call this as a method because we need to tailcall it
    # Instead, keep a reference to the actual method so we can goto &$again
    my $again = $gov->can('again') or croak "Governor cannot ->again";
 
-   my $iter; $iter = subname gkwhile => sub {
-      my $knext = $iter;
+   my $kfirst = _fix subname gkwhile => sub {
+      my $knext = shift;
 
-      $sync = 1;
+      my $sync = 1;
+      my $do_again;
       $body->(
          sub {
             if( $sync ) { $do_again=1 }
             else        { @_ = ( $gov, $knext ); goto &$again; }
          },
-         sub { undef $iter; goto &$k },
+         sub { @_ = (); goto &$k },
       );
       $sync = 0;
 
@@ -180,9 +188,6 @@ sub gkwhile
          goto &$again;
       }
    };
-
-   my $kfirst = $iter;
-   weaken( $iter );
 
    goto &$kfirst;
 }
@@ -205,9 +210,6 @@ sub gkforeach
 {
    my ( $gov, $items, $body, $k ) = @_;
 
-   ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
-   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
-
    my $idx = 0;
 
    gkwhile( $gov,
@@ -222,230 +224,6 @@ sub gkforeach
          goto &$body;
       },
       $k,
-   );
-}
-
-=head2 kmap( \@items, \&body, $k )
-
-CPS version of perl's C<map> statement. Calls the C<body> code once for each
-element in C<@items>, capturing the list of values the body passes into its
-continuation. When the items are exhausted, C<$k> is invoked and passed a list
-of all the collected values.
-
- $body->( $item, $kret )
-    $kret->( @items_out )
-
- $k->( @all_items_out )
-
-=cut
-
-sub gkmap
-{
-   my ( $gov, $items, $body, $k ) = @_;
-
-   ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
-   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
-
-   my @ret;
-   my $idx = 0;
-
-   gkwhile( $gov,
-      sub {
-         my ( $knext, $klast ) = @_;
-         goto &$klast unless $idx < scalar @$items;
-         @_ = (
-            $items->[$idx++],
-            sub { push @ret, @_; goto &$knext }
-         );
-         goto &$body;
-      },
-      sub { $k->( @ret ) },
-   );
-}
-
-=head2 kgrep( \@items, \&body, $k )
-
-CPS version of perl's C<grep> statement. Calls the C<body> code once for each
-element in C<@items>, capturing those elements where the body's continuation
-was invoked with a true value. When the items are exhausted, C<$k> is invoked
-and passed a list of the subset of C<@items> which were selected.
-
- $body->( $item, $kret )
-    $kret->( $select )
-
- $k->( @chosen_items )
-
-=cut
-
-sub gkgrep
-{
-   my ( $gov, $items, $body, $k ) = @_;
-
-   ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
-   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
-
-   my @ret;
-   my $idx = 0;
-
-   gkwhile( $gov,
-      sub {
-         my ( $knext, $klast ) = @_;
-         goto &$klast unless $idx < scalar @$items;
-         my $item = $items->[$idx++];
-         @_ = (
-            $item,
-            sub { push @ret, $item if $_[0]; goto &$knext }
-         );
-         goto &$body;
-      },
-      sub { $k->( @ret ) },
-   );
-}
-
-=head2 kfoldl( \@items, \&body, $k )
-
-CPS version of C<List::Util::reduce>, which collapses (or "folds") a list of
-values down to a single scalar, by successively accumulating values together.
-
-If C<@items> is empty, invokes C<$k> immediately, passing in C<undef>.
-
-If C<@items> contains a single value, invokes C<$k> immediately, passing in
-just that single value.
-
-Otherwise, initialises an accumulator variable with the first value in
-C<@items>, then for each additional item, invokes the C<body> passing in the
-accumulator and the next item, storing back into the accumulator the value
-that C<body> passed to its continuation. When the C<@items> are exhausted, it
-invokes C<$k>, passing in the final value of the accumulator.
-
- $body->( $acc, $item, $kret )
-    $kret->( $new_acc )
-
- $k->( $final_acc )
-
-Technically, this is not a true Scheme/Haskell-style C<foldl>, as it does not
-take an initial value. (It is what Haskell calls C<foldl1>.) However, if such
-an initial value is required, this can be provided by
-
- kfoldl( [ $initial, @items ], \&body, $k )
-
-=cut
-
-sub gkfoldl
-{
-   my ( $gov, $items, $body, $k ) = @_;
-
-   ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
-   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
-
-   $k->( undef ),       return if @$items == 0;
-   $k->( $items->[0] ), return if @$items == 1;
-
-   my $idx = 0;
-   my $acc = $items->[$idx++];
-
-   gkwhile( $gov,
-      sub {
-         my ( $knext, $klast ) = @_;
-         goto &$klast unless $idx < scalar @$items;
-         @_ = (
-            $acc,
-            $items->[$idx++],
-            sub { $acc = shift; goto &$knext }
-         );
-         goto &$body;
-      },
-      sub { $k->( $acc ) },
-   );
-}
-
-=head2 kfoldr( \@items, \&body, $k )
-
-A right-associative version of C<kfoldl()>. Where C<kfoldl()> starts with the
-first two elements in C<@items> and works forward, C<kfoldr()> starts with the
-last two and works backward.
-
- $body->( $item, $acc, $kret )
-    $kret->( $new_acc )
-
- $k->( $final_acc )
-
-As before, an initial value can be provided by modifying the C<@items> array,
-though note it has to be last this time:
-
- kfoldr( [ @items, $initial ], \&body, $k )
-
-=cut
-
-sub gkfoldr
-{
-   my ( $gov, $items, $body, $k ) = @_;
-
-   ref $items eq "ARRAY" or croak 'Expected $items as ARRAY ref';
-   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
-
-   $k->( undef ),       return if @$items == 0;
-   $k->( $items->[0] ), return if @$items == 1;
-
-   my $idx = scalar(@$items) - 1;
-   my $acc = $items->[$idx--];
-
-   gkwhile( $gov,
-      sub {
-         my ( $knext, $klast ) = @_;
-         goto &$klast if $idx < 0;
-         @_ = (
-            $items->[$idx--],
-            $acc,
-            sub { $acc = shift; goto &$knext }
-         );
-         goto &$body;
-      },
-      sub { $k->( $acc ) },
-   );
-}
-
-=head2 kgenerate( $seed, \&body, $k )
-
-An inverse operation to C<kfoldl()>; turns a single scalar into a list of
-items. Repeatedly calls the C<body> code, capturing the values it generates,
-until it indicates the end of the loop, then invoke C<$k> with the collected
-values.
-
- $body->( $seed, $kmore, $kdone )
-    $kmore->( $new_seed, @items )
-    $kdone->( @items )
-
- $k->( @all_items )
-
-With each iteration, the C<body> is invoked and passed the current C<$seed>
-value and two continuations, C<$kmore> and C<$kdone>. If C<$kmore> is invoked,
-the passed items, if any, are appended to the eventual result list. The
-C<body> is then re-invoked with the new C<$seed> value. If C<$klast> is
-invoked, the passed items, if any, are appended to the return list, then the
-entire list is passed to C<$k>.
-
-=cut
-
-sub gkgenerate
-{
-   my ( $gov, $seed, $body, $k ) = @_;
-
-   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
-
-   my @ret;
-
-   gkwhile( $gov,
-      sub {
-         my ( $knext, $klast ) = @_;
-         @_ = (
-            $seed,
-            sub { $seed = shift; push @ret, @_; goto &$knext },
-            sub { push @ret, @_; goto &$klast },
-         );
-         goto &$body;
-      },
-      sub { $k->( @ret ) },
    );
 }
 
@@ -480,8 +258,6 @@ sub gkdescendd
 {
    my ( $gov, $root, $body, $k ) = @_;
 
-   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
-
    my @stack = ( $root );
 
    gkwhile( $gov,
@@ -513,8 +289,6 @@ recursively until the bottom of the tree.
 sub gkdescendb
 {
    my ( $gov, $root, $body, $k ) = @_;
-
-   ref $body eq "CODE" or croak 'Expected $body as CODE ref';
 
    my @queue = ( $root );
 
@@ -573,11 +347,13 @@ sub gkpar
       $outstanding[$idx]++;
       $gov->enter( $bodies[$idx], sub {
          $outstanding[$idx]--;
+         @_ = ();
          goto &$kdone;
       } );
    }
 
    $sync = 0;
+   @_ = ();
    goto &$kdone;
 }
 
@@ -650,19 +426,23 @@ the speed of iteration of the loop.
 # The above is a lie. The basic functions provided are actually the gk*
 # versions; we wrap these to make the normal k* functions by passing a simple
 # governor.
+sub _governate
 {
+   my $pkg = caller;
+   my ( $func, $name ) = @_;
+
    my $default_gov = CPS::Governor::Simple->new;
 
    no strict 'refs';
 
-   foreach my $prim ( @CPS_PRIMS  ) {
-      my $func = \&{"g$prim"};
-      *{$prim} = subname $prim => sub {
-         unshift @_, $default_gov;
-         goto &$func;
-      };
-   }
+   my $code = $pkg->can( $func ) or croak "$pkg cannot $func()";
+   *{$pkg."::$name"} = subname $name => sub {
+      unshift @_, $default_gov;
+      goto &$code;
+   };
 }
+
+_governate "g$_" => $_ for @CPS_PRIMS;
 
 =head1 CPS UTILITIES
 
@@ -770,6 +550,17 @@ sub dropk(&$)
    }
 }
 
+# For back compat. for now we'll also re-export in CPS::Functional's ones
+require CPS::Functional;
+foreach ( @CPS::Functional::CPS_PRIMS ) {
+   CPS::Functional->import( $_, "g$_" );
+   push @EXPORT_OK, $_, "g$_";
+}
+# More back compat
+*kgenerate  = \&CPS::Functional::kunfold;
+*gkgenerate = \&CPS::Functional::gkunfold;
+push @EXPORT_OK, "kgenerate", "gkgenerate";
+
 # Keep perl happy; keep Britain tidy
 1;
 
@@ -777,137 +568,11 @@ __END__
 
 =head1 EXAMPLES
 
-The following aren't necessarily examples of code which would be found in real
-programs, but instead, demonstrations of how to use the above functions as
-ways of controlling program flow.
+=head2 Returning Data From Functions
 
-Without dragging in large amount of detail on an asynchronous or event-driven
-framework, it is difficult to give a useful example of behaviour that CPS
-allows that couldn't be done just as easily without. Nevertheless, I hope the
-following examples will be useful to demonstrate use of the above functions,
-in a way which hints at their use in a real program.
-
-=head2 Implementing C<join()> using C<kfoldl()>
-
- use CPS qw( kfoldl );
-
- my @words = qw( My message here );
-
- kfoldl(
-    \@words,
-    sub {
-       my ( $left, $right, $k ) = @_;
-
-       $k->( "$left $right" );
-    },
-    sub {
-       my ( $str ) = @_;
-
-       print "Joined up words: $str\n";
-    }
- );
-
-=head2 Implementing C<split()> using C<kgenerate()>
-
-The following program illustrates the way that C<kgenerate()> can split a
-string, in a reverse way to the way C<kfoldl()> can join it.
-
- use CPS qw( kgenerate );
-
- my $str = "My message here";
-
- kgenerate(
-    $str,
-    sub {
-       my ( $s, $kmore, $kdone ) = @_;
-
-       if( $s =~ s/^(.*?) // ) {
-          return $kmore->( $s, $1 );
-       }
-       else {
-          return $kdone->( $s );
-       }
-    },
-    sub {
-       my @words = @_;
-       print "Words in message:\n";
-       print "$_\n" for @words;
-    }
- );
-
-=head2 Generating Prime Numbers
-
-While the design of C<kgenerate()> is symmetric to C<kfoldl()>, the seed value
-doesn't have to be successively broken apart into pieces. Another valid use
-for it may be storing intermediate values in computation, such as in this
-example, storing a list of known primes, to help generate the next one:
-
- use CPS qw( kgenerate );
- 
- kgenerate(
-    [ 2, 3 ],
-    sub {
-       my ( $vals, $kmore, $kdone ) = @_;
- 
-       return $kdone->() if @$vals >= 50;
- 
-       PRIME: for( my $n = $vals->[-1] + 2; ; $n += 2 ) {
-          $n % $_ == 0 and next PRIME for @$vals;
- 
-          push @$vals, $n;
-          return $kmore->( $vals, $n );
-       }
-    },
-    sub {
-       my @primes = ( 2, 3, @_ );
-       print "Primes are @primes\n";
-    }
- );
-
-=head2 Forward-reading Program Flow
-
-One side benefit of the CPS control-flow methods which is unassociated with
-asynchronous operation, is that the flow of data reads in a more natural
-left-to-right direction, instead of the right-to-left flow in functional
-style. Compare
-
- sub square { $_ * $_ }
- sub add { $a + $b }
-
- print reduce( \&add, map( square, primes(10) ) );
-
-(because C<map> is a language builtin but C<reduce> is a function with C<(&)>
-prototype, it has a different way to pass in the named functions)
-
-with
-
- my $ksquare = liftk { $_[0] * $_[0] };
- my $kadd = liftk { $_[0] + $_[1] };
-
- kprimes 10, sub {
-    kmap \@_, $ksquare, sub {
-       kfoldl \@_, $kadd, sub {
-          print $_[0];
-       }
-    }
- };
-
-This translates roughly to a functional vs imperative way to describe the
-problem:
-
- Print the sum of the squares of the first 10 primes.
-
- Take the first 10 primes. Square them. Sum them. Print.
-
-Admittedly the closure creation somewhat clouds the point in this small
-example, but in a larger example, the real problem-solving logic would be
-larger, and stand out more clearly against the background boilerplate.
-
-=head2 Passing Values Using C<kpar> Or C<kseq>
-
-No facilities are provided to pass data between body and final continuations
-of C<kpar> or C<kseq>. Instead, normal lexical variable capture may be used
-here.
+No facilities are provided directly to return data from CPS body functions in
+C<kwhile>, C<kpar> and C<kseq>. Instead, normal lexical variable capture may
+be used here.
 
  my $bat;
  my $ball;
@@ -927,7 +592,10 @@ here.
     },
  );
 
-=head2 Using C<kseq> for conditionals
+The body function can set the value of a variable that it and its final
+continuation both capture.
+
+=head2 Using C<kseq> For Conditionals
 
 Consider the call/return style of code
 
@@ -959,26 +627,13 @@ invoke it indirectly.
     \&kC
  );
 
-=head1 NOTE FOR PERL 5.6 OR EARLIER
-
-C<kwhile> is implemented using a cyclic code reference; an anonymous
-function whose pad contains a reference to itself. This reference is
-stored weakly, using C<Scalar::Util::weaken>.
-
-On perl C<5.8.0> and later, this is correctly destroyed if the body function
-fails to invoke or store either of its continuations; the body stalls and
-fails to execute again, and any references it uniquely held are garbage
-collected.
-
-On earlier versions of perl (i.e. C<5.6.2> or earlier) this does not happen.
-In order not to leak references on versions prior to C<5.8> it is essential
-that the body of the C<kwhile> loop, or other functions, always either
-invokes one of its passed continuations, or stores one somewhere for eventual
-invocation.
-
 =head1 SEE ALSO
 
 =over 4
+
+=item *
+
+L<CPS::Functional> - functional utilities in Continuation-Passing Style
 
 =item *
 

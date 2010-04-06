@@ -1,5 +1,16 @@
 Revision history for CPS
 
+0.10    CHANGES:
+         * Moved data-flow functional functions into their own CPS::Functional
+           namespace
+         * Don't check ref($k) eq "CODE" - may get in the way of Clever Tricks
+           (e.g. callable objects)
+
+        BUGFIXES:
+         * Scrub @_ in continuation from kwhile() and kpar() - fixes RT 55787
+         * Implement gkwhile() using a fixpoint combinator to avoid weakref
+           bugs on perl 5.6 entirely
+
 0.09    CHANGES:
          * Added kseq()
          * Minor documentation updates

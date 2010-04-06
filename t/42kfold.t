@@ -4,7 +4,7 @@ use strict;
 
 use Test::More tests => 2;
 
-use CPS qw( kfoldl kfoldr );
+use CPS::Functional qw( kfoldl kfoldr );
 
 my $ret;
 
