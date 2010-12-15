@@ -2,11 +2,18 @@
 
 use strict;
 
-use Test::More tests => 4;
+use Test::More tests => 5;
 
-use CPS qw( kmap kgrep kfoldl kgenerate );
+use CPS qw( kwhile kmap kgrep kfoldl kgenerate );
 
 my @ret;
+
+my $i = 0;
+kwhile(
+   sub { $i++; ( $i == 5 ? $_[1] : $_[0] )->() },
+   sub {},
+);
+is( $i, 5, 'kwhile' );
 
 kmap(
    [qw( a b c )],

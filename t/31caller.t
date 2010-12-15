@@ -9,7 +9,7 @@ BEGIN {
       plan skip_all => "No Sub::Name";
 }
 
-use CPS qw( kwhile kforeach gkforeach );
+use CPS qw( kloop kforeach gkforeach );
 
 plan tests => 3;
 
@@ -23,7 +23,7 @@ sub callers
 
 my $count = 0;
 my @callers;
-kwhile( sub {
+kloop( sub {
    my ( $knext, $klast ) = @_;
    push @callers, [ callers ];
    ++$count == 3 ? $klast->() : $knext->();
@@ -31,11 +31,11 @@ kwhile( sub {
 
 is_deeply( \@callers,
            [
-              [ 'main::__ANON__', 'CPS::gkwhile' ],
-              [ 'main::__ANON__', 'CPS::gkwhile' ],
-              [ 'main::__ANON__', 'CPS::gkwhile' ],
+              [ 'main::__ANON__', 'CPS::Governor::enter', 'CPS::gkloop' ],
+              [ 'main::__ANON__', 'CPS::Governor::enter', 'CPS::gkloop' ],
+              [ 'main::__ANON__', 'CPS::Governor::enter', 'CPS::gkloop' ],
            ],
-           '@callers after kwhile' );
+           '@callers after kloop' );
 
 @callers = ();
 kforeach( [ 1 .. 3 ], sub {
@@ -46,9 +46,9 @@ kforeach( [ 1 .. 3 ], sub {
 
 is_deeply( \@callers,
            [
-              [ 'main::__ANON__', 'CPS::gkwhile', 'CPS::gkforeach' ],
-              [ 'main::__ANON__', 'CPS::gkwhile', 'CPS::gkforeach' ],
-              [ 'main::__ANON__', 'CPS::gkwhile', 'CPS::gkforeach' ],
+              [ 'main::__ANON__', 'CPS::Governor::enter', 'CPS::gkloop', 'CPS::gkforeach' ],
+              [ 'main::__ANON__', 'CPS::Governor::enter', 'CPS::gkloop', 'CPS::gkforeach' ],
+              [ 'main::__ANON__', 'CPS::Governor::enter', 'CPS::gkloop', 'CPS::gkforeach' ],
            ],
            '@callers after kforeach' );
 
@@ -65,9 +65,9 @@ $gov->poke while $gov->pending;
 
 is_deeply( \@callers,
            [
-              [ 'main::__ANON__', 'CPS::gkwhile', 'CPS::gkforeach' ],
-              [ 'main::__ANON__', 'CPS::gkwhile' ],
-              [ 'main::__ANON__', 'CPS::gkwhile' ],
+              [ 'main::__ANON__', 'TestGovernor::poke' ],
+              [ 'main::__ANON__', 'TestGovernor::poke' ],
+              [ 'main::__ANON__', 'TestGovernor::poke' ],
            ],
            '@callers after gkforeach on deferred governor' );
 
@@ -93,6 +93,5 @@ sub poke
    my $self = shift;
 
    my $code = delete $self->{code} or die;
-   @_ = @{ delete $self->{args} };
-   goto &$code;
+   $code->( @{ delete $self->{args} } );
 }

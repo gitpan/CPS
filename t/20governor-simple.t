@@ -21,7 +21,7 @@ $gov->again( sub { $called = shift }, 3 );
 is( $called, 3, '$called is 3 after $gov->again with arguments' );
 
 my $poke;
-$gov->enter( sub { $called = shift; $poke = shift; }, 4, sub { $called = 5 } );
+$gov->enter( sub { $called = 4; $poke = shift; }, sub { $called = 5 } );
 
 is( $called, 4, '$called is 4 after $gov->enter storing kleave' );
 

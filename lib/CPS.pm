@@ -8,18 +8,21 @@ package CPS;
 use strict;
 use warnings;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 use Carp;
 
 use Exporter 'import';
 
 our @CPS_PRIMS = qw(
+   kloop
    kwhile
    kforeach
    kdescendd kdescendb
 
    kpar
+   kpareach
+
    kseq
 );
 
@@ -91,9 +94,9 @@ is renamed to C<kgenerate>. This may be removed in a later version.
 
 =head1 SYNOPSIS
 
- use CPS qw( kwhile );
+ use CPS qw( kloop );
 
- kwhile( sub {
+ kloop( sub {
     my ( $knext, $klast ) = @_;
 
     print "Enter a number, or q to quit: ";
@@ -135,10 +138,10 @@ This convention is followed here.
 
 =cut
 
-=head2 kwhile( \&body, $k )
+=head2 kloop( \&body, $k )
 
-CPS version of perl's C<while> loop. Repeatedly calls the C<body> code until
-it indicates the end of the loop, then invoke C<$k>.
+CPS version of perl's C<while(true)> loop. Repeatedly calls the C<body> code
+until it indicates the end of the loop, then invoke C<$k>.
 
  $body->( $knext, $klast )
     $knext->()
@@ -148,6 +151,11 @@ it indicates the end of the loop, then invoke C<$k>.
 
 If C<$knext> is invoked, the body will be called again. If C<$klast> is
 invoked, the continuation C<$k> is invoked.
+
+=head2 kwhile( \&body, $k )
+
+Compatibility synonym for C<kloop>; it was renamed after version 0.10. New
+code should use C<kloop> instead.
 
 =cut
 
@@ -160,23 +168,23 @@ sub _fix
    };
 }
 
-sub gkwhile
+sub gkloop
 {
    my ( $gov, $body, $k ) = @_;
 
    # We can't just call this as a method because we need to tailcall it
-   # Instead, keep a reference to the actual method so we can goto &$again
-   my $again = $gov->can('again') or croak "Governor cannot ->again";
+   # Instead, keep a reference to the actual method so we can goto &$enter
+   my $enter = $gov->can('enter') or croak "Governor cannot ->enter";
 
-   my $kfirst = _fix subname gkwhile => sub {
+   my $kfirst = _fix subname gkloop => sub {
       my $knext = shift;
 
       my $sync = 1;
       my $do_again;
-      $body->(
+      $enter->( $gov, $body,
          sub {
             if( $sync ) { $do_again=1 }
-            else        { @_ = ( $gov, $knext ); goto &$again; }
+            else        { goto &$knext; }
          },
          sub { @_ = (); goto &$k },
       );
@@ -184,13 +192,14 @@ sub gkwhile
 
       if( $do_again ) {
          $do_again = 0;
-         @_ = ( $gov, $knext );
-         goto &$again;
+         goto &$knext;
       }
    };
 
    goto &$kfirst;
 }
+
+*gkwhile = \&gkloop;
 
 =head2 kforeach( \@items, \&body, $k )
 
@@ -212,7 +221,7 @@ sub gkforeach
 
    my $idx = 0;
 
-   gkwhile( $gov,
+   gkloop( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast unless $idx < scalar @$items;
@@ -260,7 +269,7 @@ sub gkdescendd
 
    my @stack = ( $root );
 
-   gkwhile( $gov,
+   gkloop( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          @_ = (
@@ -292,7 +301,7 @@ sub gkdescendb
 
    my @queue = ( $root );
 
-   gkwhile( $gov,
+   gkloop( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          @_ = (
@@ -313,8 +322,8 @@ sub gkdescendb
 =head2 kpar( @bodies, $k )
 
 This CPS function takes a list of function bodies and calls them all
-immediately. Each is given a continuation to invoke. Once every body has
-invoked its continuation, the main continuation C<$k> is invoked.
+immediately. Each is given its own continuation. Once every body has invoked
+its continuation, the main continuation C<$k> is invoked.
 
  $body->( $kdone )
    $kdone->()
@@ -355,6 +364,40 @@ sub gkpar
    $sync = 0;
    @_ = ();
    goto &$kdone;
+}
+
+=head2 kpareach( \@items, \&body, $k )
+
+This CPS function takes a list of items and a function body, and calls the
+body immediately once for each item in the list. Each invocation is given its
+own continuation. Once every body has invoked its continuation, the main
+continuation C<$k> is invoked.
+
+ $body->( $item, $kdone )
+   $kdone->()
+
+ $k->()
+
+This is similar to C<kforeach>, except that the body is started concurrently
+for all items in the list list, rather than each item waiting for the previous
+to finish.
+
+=cut
+
+sub gkpareach
+{
+   my ( $gov, $items, $body, $k ) = @_;
+
+   gkpar( $gov,
+      (map {
+         my $item = $_;
+         sub {
+            unshift @_, $item;
+            goto &$body
+         }
+      } @$items),
+      $k
+   );
 }
 
 =head2 kseq( @bodies, $k )
@@ -408,8 +451,8 @@ For every one of the above functions, there also exists a variant which takes
 a L<CPS::Governor> object as its first argument. These functions use the
 governor object to control their iteration.
 
- kwhile( \&body, $k )
- gkwhile( $gov, \&body, $k )
+ kloop( \&body, $k )
+ gkloop( $gov, \&body, $k )
 
  kforeach( \@items, \&body, $k )
  gkforeach( $gov, \@items, \&body, $k )
@@ -472,7 +515,7 @@ The following are equivalent
  $kfunc->( 1, 2, 3, sub { print @_ } );
 
 Note that the returned wrapper function only has one continuation slot in its
-arguments. It therefore cannot be used as the body for C<kwhile()>,
+arguments. It therefore cannot be used as the body for C<kloop()>,
 C<kforeach()> or C<kgenerate()>, because these pass two continuations. There
 does not exist a "natural" way to lift a normal call/return function into a
 CPS function which requires more than one continuation, because there is no
@@ -571,7 +614,7 @@ __END__
 =head2 Returning Data From Functions
 
 No facilities are provided directly to return data from CPS body functions in
-C<kwhile>, C<kpar> and C<kseq>. Instead, normal lexical variable capture may
+C<kloop>, C<kpar> and C<kseq>. Instead, normal lexical variable capture may
 be used here.
 
  my $bat;
@@ -644,6 +687,11 @@ L<http://en.wikipedia.org/wiki/Continuation-passing_style> on wikipedia
 L<Coro> - co-routines in Perl
 
 =back
+
+=head1 ACKNOWLEDGEMENTS
+
+Matt S. Trout (mst) <mst@shadowcat.co.uk> - for the inspiration of C<kpareach>
+and with apologies to for naming of the said. ;)
 
 =head1 AUTHOR
 

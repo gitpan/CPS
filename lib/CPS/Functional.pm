@@ -8,13 +8,13 @@ package CPS::Functional;
 use strict;
 use warnings;
 
-our $VERSION = '0.10';
+our $VERSION = '0.11';
 
 use Carp;
 
 use Exporter 'import';
 
-use CPS qw( gkwhile );
+use CPS qw( gkloop );
 
 our @CPS_PRIMS = qw(
    kmap
@@ -109,7 +109,7 @@ sub gkmap
    my @ret;
    my $idx = 0;
 
-   gkwhile( $gov,
+   gkloop( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast unless $idx < scalar @$items;
@@ -147,7 +147,7 @@ sub gkgrep
    my @ret;
    my $idx = 0;
 
-   gkwhile( $gov,
+   gkloop( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast unless $idx < scalar @$items;
@@ -204,7 +204,7 @@ sub gkfoldl
    my $idx = 0;
    my $acc = $items->[$idx++];
 
-   gkwhile( $gov,
+   gkloop( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast unless $idx < scalar @$items;
@@ -250,7 +250,7 @@ sub gkfoldr
    my $idx = scalar(@$items) - 1;
    my $acc = $items->[$idx--];
 
-   gkwhile( $gov,
+   gkloop( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          goto &$klast if $idx < 0;
@@ -295,7 +295,7 @@ sub gkunfold
 
    my @ret;
 
-   gkwhile( $gov,
+   gkloop( $gov,
       sub {
          my ( $knext, $klast ) = @_;
          @_ = (
