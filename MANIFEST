@@ -3,6 +3,7 @@ Changes
 examples/kforeach.pl
 lib/CPS.pm
 lib/CPS/Functional.pm
+lib/CPS/Future.pm
 lib/CPS/Governor.pm
 lib/CPS/Governor/Deferred.pm
 lib/CPS/Governor/Simple.pm
@@ -29,5 +30,7 @@ t/40kmap.t
 t/41kgrep.t
 t/42kfold.t
 t/43kunfold.t
+t/50future.t
 t/98back-compat.t
 t/99pod.t
+META.json

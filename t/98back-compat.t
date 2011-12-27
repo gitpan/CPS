@@ -2,9 +2,25 @@
 
 use strict;
 
-use Test::More tests => 5;
+use Test::More tests => 6;
 
-use CPS qw( kwhile kmap kgrep kfoldl kgenerate );
+my $warnings;
+my $warnline;
+{
+   local $SIG{__WARN__} = sub { $warnings .= join "", @_ };
+
+   require CPS;
+
+   $warnline = __LINE__+1;
+   CPS->import(qw( kwhile kmap kgrep kfoldl kgenerate ));
+}
+
+is( $warnings, <<"EOF", 'Import warnings' );
+Legacy import of kmap; use CPS::Functional 'kmap' instead at $0 line $warnline
+Legacy import of kgrep; use CPS::Functional 'kgrep' instead at $0 line $warnline
+Legacy import of kfoldl; use CPS::Functional 'kfoldl' instead at $0 line $warnline
+Legacy import of kgenerate; use CPS::Functional 'kunfold' instead at $0 line $warnline
+EOF
 
 my @ret;
 

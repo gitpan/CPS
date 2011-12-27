@@ -8,11 +8,9 @@ package CPS;
 use strict;
 use warnings;
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 use Carp;
-
-use Exporter 'import';
 
 our @CPS_PRIMS = qw(
    kloop
@@ -593,21 +591,41 @@ sub dropk(&$)
    }
 }
 
-# For back compat. for now we'll also re-export in CPS::Functional's ones
-require CPS::Functional;
-foreach ( @CPS::Functional::CPS_PRIMS ) {
-   CPS::Functional->import( $_, "g$_" );
-   push @EXPORT_OK, $_, "g$_";
+require Exporter;
+
+sub import
+{
+   my $pkg = shift;
+   my $caller = caller($Exporter::ExportLevel);
+
+   no strict 'refs';
+
+   my @symbols;
+
+   # Import legacy redirects with deprecation warnings
+
+   foreach ( @_ ) {
+      if( m/^g?(?:kmap|kgrep|kfoldl|kfoldr|kunfold)$/ ) {
+         warnings::warnif deprecated => "Legacy import of $_; use CPS::Functional '$_' instead";
+
+         require CPS::Functional;
+         *{$caller."::$_"} = \&{"CPS::Functional::$_"};
+      }
+      elsif( m/^(g?)kgenerate$/ ) {
+         my $from = "$1kunfold";
+         warnings::warnif deprecated => "Legacy import of $_; use CPS::Functional '$from' instead";
+
+         require CPS::Functional;
+         *{$caller."::$_"} = \&{"CPS::Functional::$from"};
+      }
+      else {
+         push @symbols, $_;
+      }
+   }
+
+   local $Exporter::ExportLevel = $Exporter::ExportLevel + 1;
+   Exporter::import( $pkg, @symbols );
 }
-# More back compat
-*kgenerate  = \&CPS::Functional::kunfold;
-*gkgenerate = \&CPS::Functional::gkunfold;
-push @EXPORT_OK, "kgenerate", "gkgenerate";
-
-# Keep perl happy; keep Britain tidy
-1;
-
-__END__
 
 =head1 EXAMPLES
 
@@ -696,3 +714,7 @@ and with apologies to for naming of the said. ;)
 =head1 AUTHOR
 
 Paul Evans <leonerd@leonerd.org.uk>
+
+=cut
+
+0x55AA;

@@ -10,7 +10,7 @@ use warnings;
 
 use base qw( CPS::Governor );
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 =head1 NAME
 
@@ -188,11 +188,6 @@ sub flush
    $self->prod while $self->is_pending;
 }
 
-# Keep perl happy; keep Britain tidy
-1;
-
-__END__
-
 =head1 SUBCLASS METHODS
 
 The following methods are used internally to implement the functionallity,
@@ -212,3 +207,7 @@ set).
 =head1 AUTHOR
 
 Paul Evans <leonerd@leonerd.org.uk>
+
+=cut
+
+0x55AA;

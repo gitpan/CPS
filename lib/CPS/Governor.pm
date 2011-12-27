@@ -10,7 +10,7 @@ use warnings;
 
 use Carp;
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 =head1 NAME
 
@@ -53,11 +53,6 @@ sub enter
    my $self = shift;
    $self->again( @_ );
 }
-
-# Keep perl happy; keep Britain tidy
-1;
-
-__END__
 
 =head1 SUBCLASS METHODS
 
@@ -133,3 +128,7 @@ L<Sub::Call::Tail> - Tail calls for subroutines and methods
 =head1 AUTHOR
 
 Paul Evans <leonerd@leonerd.org.uk>
+
+=cut
+
+0x55AA;

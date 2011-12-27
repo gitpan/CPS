@@ -8,7 +8,7 @@ package CPS::Functional;
 use strict;
 use warnings;
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 use Carp;
 
@@ -311,11 +311,6 @@ sub gkunfold
 
 CPS::_governate "g$_" => $_ for @CPS_PRIMS;
 
-# Keep perl happy; keep Britain tidy
-1;
-
-__END__
-
 =head1 EXAMPLES
 
 The following aren't necessarily examples of code which would be found in real
@@ -457,3 +452,7 @@ L<CPS> - manage flow of control in Continuation-Passing Style
 =head1 AUTHOR
 
 Paul Evans <leonerd@leonerd.org.uk>
+
+=cut
+
+0x55AA;
