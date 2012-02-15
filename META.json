@@ -4,7 +4,7 @@
       "Paul Evans <leonerd@leonerd.org.uk>"
    ],
    "dynamic_config" : 1,
-   "generated_by" : "Module::Build version 0.38, CPAN::Meta::Converter version 2.112621",
+   "generated_by" : "Module::Build version 0.38, CPAN::Meta::Converter version 2.113640",
    "license" : [
       "perl_5"
    ],
@@ -16,6 +16,7 @@
    "prereqs" : {
       "build" : {
          "requires" : {
+            "Test::Fatal" : 0,
             "Test::Identity" : 0,
             "Test::More" : 0,
             "Test::Refcount" : 0
@@ -30,27 +31,27 @@
    "provides" : {
       "CPS" : {
          "file" : "lib/CPS.pm",
-         "version" : "0.12"
+         "version" : "0.13"
       },
       "CPS::Functional" : {
          "file" : "lib/CPS/Functional.pm",
-         "version" : "0.12"
+         "version" : "0.13"
       },
       "CPS::Future" : {
          "file" : "lib/CPS/Future.pm",
-         "version" : "0.12"
+         "version" : "0.13"
       },
       "CPS::Governor" : {
          "file" : "lib/CPS/Governor.pm",
-         "version" : "0.12"
+         "version" : "0.13"
       },
       "CPS::Governor::Deferred" : {
          "file" : "lib/CPS/Governor/Deferred.pm",
-         "version" : "0.12"
+         "version" : "0.13"
       },
       "CPS::Governor::Simple" : {
          "file" : "lib/CPS/Governor/Simple.pm",
-         "version" : "0.12"
+         "version" : "0.13"
       }
    },
    "release_status" : "stable",
@@ -59,5 +60,5 @@
          "http://dev.perl.org/licenses/"
       ]
    },
-   "version" : "0.12"
+   "version" : "0.13"
 }

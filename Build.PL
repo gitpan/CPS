@@ -9,9 +9,10 @@ my $build = Module::Build->new(
       'Sub::Name' => 0,
    },
    build_requires => {
+      'Test::Identity' => 0,
+      'Test::Fatal' => 0,
       'Test::More' => 0,
       'Test::Refcount' => 0,
-      'Test::Identity' => 0,
    },
    auto_configure_requires => 0, # Don't add M::B to configure_requires
    license => 'perl',

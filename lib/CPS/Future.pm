@@ -1,16 +1,17 @@
 #  You may distribute under the terms of either the GNU General Public License
 #  or the Artistic License (the same terms as Perl itself)
 #
-#  (C) Paul Evans, 2011 -- leonerd@leonerd.org.uk
+#  (C) Paul Evans, 2011-2012 -- leonerd@leonerd.org.uk
 
 package CPS::Future;
 
 use strict;
 use warnings;
 
-our $VERSION = '0.12';
+our $VERSION = '0.13';
 
 use Carp;
+use Scalar::Util qw( weaken );
 
 =head1 NAME
 
@@ -34,15 +35,17 @@ progress, or has recently completed. It can be used in a variety of ways to
 manage the flow of control, and data, through an asynchronous program.
 
 Some futures represent a single operation (returned by the C<new>
-constructor), and are explicitly marked as complete by calling the C<done>
+constructor), and are explicitly marked as ready by calling the C<done>
 method. Others represent a tree of sub-tasks (returned by the C<wait_all>
-constructor), and are implicitly marked as complete when all of their
-component futures are complete.
+or C<needs_all> constructors), and are implicitly marked as ready when all
+of their component futures are ready.
 
 It is intended that library functions that perform asynchonous operations
 would use C<CPS::Future> objects to represent outstanding operations, and
 allow their calling programs to control or wait for these operations to
-complete.
+complete. The implementation and the user of such an interface would typically
+make use of different methods on the class. The methods below are documented
+in two sections; those of interest to each side of the interface.
 
 =cut
 
@@ -53,47 +56,244 @@ complete.
 =head2 $future = CPS::Future->new
 
 Returns a new C<CPS::Future> instance to represent a leaf future. It will be
-marked as complete by either of the C<done> or C<fail> methods.
+marked as ready by any of the C<done>, C<fail>, or C<cancel> methods.
+
+This constructor would primarily be used by implementations of asynchronous
+interfaces.
 
 =cut
 
 sub new
 {
    my $class = shift;
-   return bless { ready => 0 }, $class;
+   return bless {
+      ready     => 0,
+      callbacks => [],
+   }, $class;
+}
+
+sub _new_with_subs
+{
+   my $self = shift->new;
+   my ( $subs ) = @_;
+
+   eval { $_->isa( __PACKAGE__ ) } or croak "Expected a ".__PACKAGE__.", got $_" for @$subs;
+
+   $self->{result} = $subs;
+
+   $self->on_cancel( sub {
+      foreach my $sub ( @$subs ) {
+         $sub->cancel if !$sub->is_ready;
+      }
+   } );
+
+   return $self;
 }
 
 =head2 $future = CPS::Future->wait_all( @subfutures )
 
-Returns a new C<CPS::Future> instance that will indicate completion once
-all of the sub future objects given to it indicate that they are complete.
+Returns a new C<CPS::Future> instance that will indicate it is ready once all
+of the sub future objects given to it indicate that they are ready.
+
+This constructor would primarily be used by users of asynchronous interfaces.
 
 =cut
 
 sub wait_all
 {
-   my $self = shift->new;
-   my $result = $self->{result} = [ (undef) x scalar @_ ];
-   foreach my $idx ( 0 .. $#_ ) {
-      my $sub = $_[$idx];
-      $sub->on_ready( sub {
-         $result->[$idx] = $_[0]; # capture the child future now ready
-         defined $_ or return for @$result;
-         $self->_mark_ready;
-      } );
+   my $class = shift;
+   my @subs = @_;
+
+   my $self = $class->_new_with_subs( \@subs );
+
+   weaken( my $weakself = $self );
+   my $sub_on_ready = sub {
+      foreach my $sub ( @subs ) {
+         $sub->is_ready or return;
+      }
+      $weakself and $weakself->_mark_ready;
+   };
+
+   foreach my $sub ( @subs ) {
+      $sub->on_ready( $sub_on_ready );
    }
+
    return $self;
 }
 
-=head1 METHODS
+=head2 $future = CPS::Future->needs_all( @subfutures )
+
+Returns a new C<CPS::Future> instance that will indicate it is ready once all
+of the sub future objects given to it indicate that they have completed
+successfully, or when any of them indicates that they have failed. If any sub
+future fails, then this will fail immediately, and the remaining subs not yet
+ready will be cancelled.
+
+This constructor would primarily be used by users of asynchronous interfaces.
+
+=cut
+
+sub needs_all
+{
+   my $class = shift;
+   my @subs = @_;
+
+   my $self = $class->_new_with_subs( \@subs );
+
+   weaken( my $weakself = $self );
+   my $sub_on_ready = sub {
+      return unless $weakself;
+
+      if( my @failure = $_[0]->failure ) {
+         $weakself->{failure} = \@failure;
+         foreach my $sub ( @subs ) {
+            $sub->cancel if !$sub->is_ready;
+         }
+         $weakself->_mark_ready;
+      }
+      else {
+         foreach my $sub ( @subs ) {
+            $sub->is_ready or return;
+         }
+         $weakself->_mark_ready;
+      }
+   };
+
+   foreach my $sub ( @subs ) {
+      $sub->on_ready( $sub_on_ready );
+   }
+
+   return $self;
+}
+
+sub _mark_ready
+{
+   my $self = shift;
+   $self->{ready} = 1;
+
+   my $failed = defined $self->failure;
+   my $done   = !$failed && !$self->is_cancelled;
+
+   foreach my $cb ( @{ $self->{callbacks} } ) {
+      $cb->[1]->( $self )          if $cb->[0] eq "ready";
+      $cb->[1]->( $self->get )     if $cb->[0] eq "done"   and $done;
+      $cb->[1]->( $self->failure ) if $cb->[0] eq "failed" and $failed;
+   }
+
+   delete $self->{callbacks}; # To drop references
+}
+
+=head1 IMPLEMENTATION METHODS
+
+These methods would primarily be used by implementations of asynchronous
+interfaces.
+
+=cut
+
+=head2 $future->done( @result )
+
+Marks that the leaf future is now ready, and provides a list of values as a
+result. (The empty list is allowed, and still indicates the future as ready).
+Cannot be called on a non-leaf future.
+
+Returns the C<$future>.
+
+=cut
+
+sub done
+{
+   my $self = shift;
+
+   $self->is_ready and croak "$self is already complete and cannot be ->done twice";
+   $self->{result} and croak "$self is not a leaf Future, cannot be ->done";
+   $self->{result} = [ @_ ];
+   $self->_mark_ready;
+
+   return $self;
+}
+
+=head2 $future->fail( $exception, @details )
+
+Marks that the leaf future has failed, and provides an exception value. This
+exception will be thrown by the C<get> method if called. If the exception is a
+non-reference that does not end in a linefeed, its value will be extended by
+the file and line number of the caller, similar to the logic that C<die> uses.
+
+The exception must evaluate as a true value; false exceptions are not allowed.
+Further details may be provided that will be returned by the C<failure> method
+in list context. These details will not be part of the exception string raised
+by C<get>.
+
+Returns the C<$future>.
+
+=cut
+
+sub fail
+{
+   my $self = shift;
+   my ( $exception, @details ) = @_;
+
+   $self->is_ready and croak "$self is already complete and cannot be ->fail'ed";
+   $self->{result} and croak "$self is not a leaf Future, cannot be ->fail'ed";
+   $_[0] or croak "$self ->fail requires an exception that is true";
+   if( !ref $exception and $exception !~ m/\n$/ ) {
+      $exception .= sprintf " at %s line %d\n", (caller)[1,2];
+   }
+   $self->{failure} = [ $exception, @details ];
+   $self->_mark_ready;
+
+   return $self;
+}
+
+=head2 $future->on_cancel( $code )
+
+If the future is not yet ready, adds a callback to be invoked if the future is
+cancelled by the C<cancel> method. If the future is already ready, throws an
+exception.
+
+If the future is cancelled, the callbacks will be invoked in the reverse order
+to that in which they were registered.
+
+ $on_cancel->( $future )
+
+=cut
+
+sub on_cancel
+{
+   my $self = shift;
+   $self->is_ready and croak "$self is already complete and cannot register more ->on_cancel handlers";
+   push @{ $self->{on_cancel} }, @_;
+}
+
+=head2 $cancelled = $future->is_cancelled
+
+Returns true if the future has been cancelled by C<cancel>.
+
+=cut
+
+sub is_cancelled
+{
+   my $self = shift;
+   return $self->{cancelled};
+}
+
+=head1 USER METHODS
+
+These methods would primarily be used by users of asynchronous interfaces, on
+objects returned by such an interface.
 
 =cut
 
 =head2 $ready = $future->is_ready
 
 Returns true on a leaf future if a result has been provided to the C<done>
-method or failed using the C<fail> method, true on a C<wait_all> future if all
-the sub-tasks are ready, or false if it is still waiting.
+method, failed using the C<fail> method, or cancelled using the C<cancel>
+method.
+
+Returns true on a C<wait_all> future if all the sub-tasks are ready.
+
+Returns true on a C<needs_all> future if all the sub-tasks have completed
+successfully or if any of them have failed.
 
 =cut
 
@@ -113,6 +313,8 @@ invoked code can then obtain the list of results by calling the C<get> method.
 
  $on_ready->( $future )
 
+Returns the C<$future>.
+
 =cut
 
 sub on_ready
@@ -124,69 +326,20 @@ sub on_ready
       $code->( $self );
    }
    else {
-      push @{ $self->{on_ready} }, $code;
+      push @{ $self->{callbacks} }, [ ready => $code ];
    }
-}
 
-=head2 $future->done( @result )
-
-Marks that the leaf future is now complete, and provides a list of values as a
-result. (The empty list is allowed, and still indicates the future as complete).
-Cannot be called on a C<wait_all> future.
-
-=cut
-
-sub done
-{
-   my $self = shift;
-   $self->is_ready and croak "$self is already complete and cannot be ->done twice";
-   $self->{result} and croak "$self is not a leaf Future, cannot be ->done";
-   $self->{result} = [ @_ ];
-   $self->_mark_ready;
-}
-
-=head2 $task->fail( $exception )
-
-Marks that the leaf future has failed, and provides an exception value. This
-exception will be thrown by the C<get> method if called. If the exception is a
-non-reference that does not end in a linefeed, its value will be extended by
-the file and line number of the caller, similar to the logic that C<die> uses.
-
-The exception must evaluate as a true value; false exceptions are not allowed.
-
-=cut
-
-sub fail
-{
-   my $self = shift;
-   my ( $exception ) = @_;
-   $self->is_ready and croak "$self is already complete and cannot be ->fail'ed";
-   $self->{result} and croak "$self is not a leaf Future, cannot be ->fail'ed";
-   $_[0] or croak "$self ->fail requires an exception that is true";
-   if( !ref $exception and $exception !~ m/\n$/ ) {
-      $exception .= sprintf " at %s line %d\n", (caller)[1,2];
-   }
-   $self->{failure} = $exception;
-   $self->_mark_ready;
-}
-
-sub _mark_ready
-{
-   my $self = shift;
-   $self->{ready} = 1;
-   if( my $on_ready_list = $self->{on_ready} ) {
-      $_->( $self ) for @$on_ready_list;
-      delete $self->{on_ready}; # To drop references to parent
-   }
+   return $self;
 }
 
 =head2 @result = $future->get
 
-If the future is complete, returns the list of results that had earlier been
+If the future is ready, returns the list of results that had earlier been
 given to the C<done> method. If not, will raise an exception.
 
-If called on a C<wait_all> future, it will return a list of the futures it was
-waiting on, in the order they were passed to the constructor.
+If called on a C<wait_all> or C<needs_all> future, it will return a list of
+the futures it was waiting on, in the order they were passed to the
+constructor.
 
 =cut
 
@@ -194,24 +347,60 @@ sub get
 {
    my $self = shift;
    $self->is_ready or croak "$self is not yet complete";
-   die $self->{failure} if $self->{failure};
+   die $self->{failure}->[0] if $self->{failure};
+   $self->is_cancelled and croak "$self was cancelled";
    return @{ $self->{result} };
 }
 
-=head2 $exception = $task->failure
+=head2 $future->on_done( $code )
 
-Returns the exception passed to the C<fail> method, C<undef> if the task
+If the future is not yet ready, adds a callback to be invoked when the future
+is ready, if it completes successfully. If the future completed successfully,
+invokes it immediately. If it failed or was cancelled, it is not invoked at
+all.
+
+The callback will be passed the result passed to the C<done> method.
+
+ $on_done->( @result )
+
+Returns the C<$future>.
+
+=cut
+
+sub on_done
+{
+   my $self = shift;
+   my ( $code ) = @_;
+
+   if( $self->is_ready and !$self->failure and !$self->is_cancelled ) {
+      $code->( $self->get );
+   }
+   else {
+      push @{ $self->{callbacks} }, [ done => $code ];
+   }
+
+   return $self;
+}
+
+=head2 $exception = $future->failure
+
+=head2 $exception, @details = $future->failure
+
+Returns the exception passed to the C<fail> method, C<undef> if the future
 completed successfully via the C<done> method, or raises an exception if
-called on a task that is not yet complete.
+called on a future that is not yet ready.
+
+If called in list context, will additionally yield a list of the details
+provided to the C<fail> method.
 
 Because the exception value must be true, this can be used in a simple C<if>
 statement:
 
- if( my $exception = $task->failure ) {
+ if( my $exception = $future->failure ) {
     ...
  }
  else {
-    my @result = $task->get;
+    my @result = $future->get;
     ...
  }
 
@@ -221,7 +410,59 @@ sub failure
 {
    my $self = shift;
    $self->is_ready or croak "$self is not yet complete";
-   return $self->{failure};
+   return unless $self->{failure};
+   return $self->{failure}->[0] if !wantarray;
+   return @{ $self->{failure} };
+}
+
+=head2 $future->on_fail( $code )
+
+If the future is not yet ready, adds a callback to be invoked when the future
+is ready, if it fails. If the future has already failed, invokes it
+immediately. If it completed successfully or was cancelled, it is not invoked
+at all.
+
+The callback will be passed the exception and details passed to the C<fail>
+method.
+
+ $on_fail->( $exception, @details )
+
+Returns the C<$future>.
+
+=cut
+
+sub on_fail
+{
+   my $self = shift;
+   my ( $code ) = @_;
+
+   if( $self->is_ready and $self->failure ) {
+      $code->( $self->failure );
+   }
+   else {
+      push @{ $self->{callbacks} }, [ failed => $code ];
+   }
+
+   return $self;
+}
+
+=head2 $future->cancel
+
+Requests that the future be cancelled, immediately marking it as ready. This
+will invoke all of the code blocks registered by C<on_cancel>, in the reverse
+order. When called on a non-leaf future, all its sub-tasks are also cancelled.
+
+=cut
+
+sub cancel
+{
+   my $self = shift;
+
+   $self->{cancelled}++;
+   foreach my $cb ( reverse @{ $self->{on_cancel} || [] } ) {
+      $cb->( $self );
+   }
+   $self->_mark_ready;
 }
 
 =head1 EXAMPLES
@@ -322,17 +563,6 @@ Lots of things still need adding. API or semantics is somewhat unclear in
 places.
 
 =over 4
-
-=item *
-
-Allow futures to be cancellable. Give them a C<cancel> method, and some way to
-hook code to run to cancel it. Should the canceller blocks accumulate, or
-replace each other?
-
-=item *
-
-C<< CPS::Future->needs_all >>, which fails on the first failure of dependent
-futures and cancels the outstanding ones.
 
 =item *
 
