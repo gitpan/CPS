@@ -8,7 +8,7 @@ package CPS;
 use strict;
 use warnings;
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 
 use Carp;
 
@@ -329,7 +329,7 @@ its continuation, the main continuation C<$k> is invoked.
  $k->()
 
 This allows running multiple operations in parallel, and waiting for them all
-to complete before continuing. It provides in a CPS form functionallity
+to complete before continuing. It provides in a CPS form functionality
 similar to that provided in a more object-oriented fashion by modules such as
 L<Async::MergePoint> or L<Event::Join>.
 

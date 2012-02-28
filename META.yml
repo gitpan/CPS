@@ -17,24 +17,24 @@ name: CPS
 provides:
   CPS:
     file: lib/CPS.pm
-    version: 0.13
+    version: 0.14
   CPS::Functional:
     file: lib/CPS/Functional.pm
-    version: 0.13
+    version: 0.14
   CPS::Future:
     file: lib/CPS/Future.pm
-    version: 0.13
+    version: 0.14
   CPS::Governor:
     file: lib/CPS/Governor.pm
-    version: 0.13
+    version: 0.14
   CPS::Governor::Deferred:
     file: lib/CPS/Governor/Deferred.pm
-    version: 0.13
+    version: 0.14
   CPS::Governor::Simple:
     file: lib/CPS/Governor/Simple.pm
-    version: 0.13
+    version: 0.14
 recommends:
   Sub::Name: 0
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.13
+version: 0.14

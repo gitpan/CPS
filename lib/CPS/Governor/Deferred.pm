@@ -10,7 +10,7 @@ use warnings;
 
 use base qw( CPS::Governor );
 
-our $VERSION = '0.13';
+our $VERSION = '0.14';
 
 =head1 NAME
 
@@ -190,7 +190,7 @@ sub flush
 
 =head1 SUBCLASS METHODS
 
-The following methods are used internally to implement the functionallity,
+The following methods are used internally to implement the functionality,
 which may be useful to implementors of subclasses.
 
 =cut

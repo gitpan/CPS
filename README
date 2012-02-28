@@ -151,8 +151,8 @@ FUNCTIONS
 
     This allows running multiple operations in parallel, and waiting for
     them all to complete before continuing. It provides in a CPS form
-    functionallity similar to that provided in a more object-oriented
-    fashion by modules such as Async::MergePoint or Event::Join.
+    functionality similar to that provided in a more object-oriented fashion
+    by modules such as Async::MergePoint or Event::Join.
 
   kpareach( \@items, \&body, $k )
     This CPS function takes a list of items and a function body, and calls

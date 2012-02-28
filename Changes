@@ -1,5 +1,8 @@
 Revision history for CPS
 
+0.14    CHANGES:
+         * Handle Carp 1.25's new message format - RT 75377
+
 0.13    CHANGES:
          * More work on CPS::Future - added cancellation, on_fail/on_done,
            needs_all constructor

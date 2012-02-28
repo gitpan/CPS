@@ -15,12 +15,14 @@ my $warnline;
    CPS->import(qw( kwhile kmap kgrep kfoldl kgenerate ));
 }
 
-is( $warnings, <<"EOF", 'Import warnings' );
-Legacy import of kmap; use CPS::Functional 'kmap' instead at $0 line $warnline
-Legacy import of kgrep; use CPS::Functional 'kgrep' instead at $0 line $warnline
-Legacy import of kfoldl; use CPS::Functional 'kfoldl' instead at $0 line $warnline
-Legacy import of kgenerate; use CPS::Functional 'kunfold' instead at $0 line $warnline
+# Carp 1.25 added a period at the end of the message, to match core's die()
+my $re = <<"EOF";
+Legacy import of kmap; use CPS::Functional 'kmap' instead at \Q$0\E line $warnline\.?
+Legacy import of kgrep; use CPS::Functional 'kgrep' instead at \Q$0\E line $warnline\.?
+Legacy import of kfoldl; use CPS::Functional 'kfoldl' instead at \Q$0\E line $warnline\.?
+Legacy import of kgenerate; use CPS::Functional 'kunfold' instead at \Q$0\E line $warnline\.?
 EOF
+like( $warnings, qr/^$re$/, 'Import warnings' );
 
 my @ret;
 
