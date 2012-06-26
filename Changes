@@ -1,5 +1,8 @@
 Revision history for CPS
 
+0.15    CHANGES:
+         * More work on CPS::Future - added ->and_then, ->transform
+
 0.14    CHANGES:
          * Handle Carp 1.25's new message format - RT 75377
 

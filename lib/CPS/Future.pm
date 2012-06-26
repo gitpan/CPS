@@ -8,7 +8,7 @@ package CPS::Future;
 use strict;
 use warnings;
 
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 
 use Carp;
 use Scalar::Util qw( weaken );
@@ -164,6 +164,127 @@ sub needs_all
    }
 
    return $self;
+}
+
+=head2 $future = $f1->and_then( \&code )
+
+Returns a new C<CPS::Future> instance that allows a sequence of dependent
+operations to be performed. Once C<$f1> indicates a successful completion, the
+code reference will be invoked and is passed one argument, being C<$f1>. It
+should return a new future, C<$f2>. Once C<$f2> indicates completion the
+combined future C<$future> will then be marked as complete. The result of
+calling C<get> on the combined future will return whatever was passed to the
+C<done> method of C<$f2>.
+
+ $f2 = $code->( $f1 )
+
+If C<$f1> fails then C<$future> will indicate this failure immediately and the
+block of code will not be invoked.
+
+If C<$future> is cancelled before C<$f1> completes, then C<$f1> will be
+cancelled. If it is cancelled after completion then C<$f2> is cancelled
+instead.
+
+=cut
+
+sub and_then
+{
+   my $f1 = shift;
+   my ( $code ) = @_;
+
+   my $fseq = CPS::Future->new;
+
+   my $f2;
+
+   $f1->on_ready( sub {
+      my $self = shift;
+
+      if( $self->is_cancelled ) {
+         return;
+      }
+
+      if( $self->failure ) {
+         $fseq->fail( $self->failure );
+         return;
+      }
+
+      $f2 = $code->( $self );
+
+      $f2->on_ready( sub {
+         my $f2 = shift;
+         if( $f2->is_cancelled ) {
+            return;
+         }
+         elsif( $f2->failure ) {
+            $fseq->fail( $f2->failure );
+         }
+         else {
+            $fseq->done( $f2->get );
+         }
+      } );
+   } );
+
+   $fseq->on_cancel( sub {
+      ( $f2 || $f1 )->cancel
+   } );
+
+   return $fseq;
+}
+
+=head2 $future = $f1->transform( %args )
+
+Returns a new C<CPS::Future> instance that wraps the one given as C<$f1>. With
+no arguments this will be a trivial wrapper; C<$future> will complete or fail
+when C<$f1> does, and C<$f1> will be cancelled when C<$future> is.
+
+By passing the following named argmuents, the returned C<$future> can be made
+to behave differently to C<$f1>:
+
+=over 8
+
+=item done => CODE
+
+Provides a function to use to modify the result of a successful completion.
+When C<$f1> completes successfully, the result of its C<get> method is passed
+into this function, and whatever it returns is passed to the C<done> method of
+C<$future>
+
+=item fail => CODE
+
+Provides a function to use to modify the result of a failure. When C<$f1>
+fails, the result of its C<failure> method is passed into this function, and
+whatever it returns is passed to the C<fail> method of C<$future>.
+
+=back
+
+=cut
+
+sub transform
+{
+   my $self = shift;
+   my %args = @_;
+
+   my $xfrm_done = $args{done};
+   my $xfrm_fail = $args{fail};
+
+   my $ret = CPS::Future->new;
+
+   $self->on_ready(
+      sub {
+         my $self = shift;
+         if( $self->is_cancelled ) { }
+         elsif( $self->failure ) {
+            $ret->fail( $xfrm_fail ? $xfrm_fail->( $self->failure ) : $self->failure )
+         }
+         else {
+            $ret->done( $xfrm_done ? $xfrm_done->( $self->get ) : $self->get );
+         }
+      }
+   );
+
+   $ret->on_cancel( sub { $self->cancel } );
+
+   return $ret;
 }
 
 sub _mark_ready

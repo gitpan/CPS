@@ -34,5 +34,6 @@ t/43kunfold.t
 t/50future.t
 t/51future-wait_all.t
 t/52future-needs_all.t
+t/53future-and_then.t
 t/98back-compat.t
 t/99pod.t

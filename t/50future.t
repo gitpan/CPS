@@ -2,7 +2,7 @@
 
 use strict;
 
-use Test::More tests => 29;
+use Test::More tests => 32;
 use Test::Fatal;
 use Test::Identity;
 use Test::Refcount;
@@ -118,4 +118,36 @@ use CPS::Future;
    is( $ready, 1, '$future on_ready still called by cancel' );
 
    like( exception { $future->get }, qr/cancelled/, '$future->get throws exception by cancel' );
+}
+
+# Transformations
+{
+   my $f1 = CPS::Future->new;
+
+   my $future = $f1->transform(
+      done => sub { result => @_ },
+   );
+
+   $f1->done( 1, 2, 3 );
+
+   is_deeply( [ $future->get ], [ result => 1, 2, 3 ], '->transform result' );
+
+   $f1 = CPS::Future->new;
+
+   $future = $f1->transform(
+      fail => sub { "failure\n" => @_ },
+   );
+
+   $f1->fail( "something failed\n" );
+
+   is_deeply( [ $future->failure ], [ "failure\n" => "something failed\n" ], '->transform failure' );
+
+   $f1 = CPS::Future->new;
+   my $cancelled;
+   $f1->on_cancel( sub { $cancelled++ } );
+
+   $future = $f1->transform;
+
+   $future->cancel;
+   is( $cancelled, 1, '->transform cancel' );
 }
