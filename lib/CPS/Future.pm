@@ -8,7 +8,7 @@ package CPS::Future;
 use strict;
 use warnings;
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 use Carp;
 use Scalar::Util qw( weaken );
@@ -296,9 +296,22 @@ sub _mark_ready
    my $done   = !$failed && !$self->is_cancelled;
 
    foreach my $cb ( @{ $self->{callbacks} } ) {
-      $cb->[1]->( $self )          if $cb->[0] eq "ready";
-      $cb->[1]->( $self->get )     if $cb->[0] eq "done"   and $done;
-      $cb->[1]->( $self->failure ) if $cb->[0] eq "failed" and $failed;
+      my ( $type, $code ) = @$cb;
+      my $is_future = eval { $code->isa( "CPS::Future" ) };
+
+      if( $type eq "ready" ) {
+         $is_future ? ( $done ? $code->done( $self->get )
+                              : $code->fail( $self->failure ) )
+                    : $code->( $self );
+      }
+      elsif( $type eq "done" and $done ) {
+         $is_future ? $code->done( $self->get ) 
+                    : $code->( $self->get );
+      }
+      elsif( $type eq "failed" and $failed ) {
+         $is_future ? $code->fail( $self->failure )
+                    : $code->( $self->failure );
+      }
    }
 
    delete $self->{callbacks}; # To drop references
@@ -313,13 +326,23 @@ interfaces.
 
 =head2 $future->done( @result )
 
+=head2 $future->( @result )
+
 Marks that the leaf future is now ready, and provides a list of values as a
 result. (The empty list is allowed, and still indicates the future as ready).
 Cannot be called on a non-leaf future.
 
 Returns the C<$future>.
 
+This method is used to overload the calling operator, so simply invoking the
+future object itself as if it were a C<CODE> reference is equivalent to
+calling the C<done> method. This makes it simple to pass as a callback
+function to other code.
+
 =cut
+
+use overload '&{}' => sub { my $self = shift; sub { $self->done( @_ ) } },
+             fallback => 1;
 
 sub done
 {
@@ -436,6 +459,12 @@ invoked code can then obtain the list of results by calling the C<get> method.
 
 Returns the C<$future>.
 
+=head2 $future->on_ready( $f )
+
+If passed another C<CPS::Future> instance, the passed instance will have its
+C<done> or C<fail> methods invoked when the original future completes
+successfully or fails respectively.
+
 =cut
 
 sub on_ready
@@ -485,6 +514,11 @@ The callback will be passed the result passed to the C<done> method.
  $on_done->( @result )
 
 Returns the C<$future>.
+
+=head2 $future->on_done( $f )
+
+If passed another C<CPS::Future> instance, the passed instance will have its
+C<done> method invoked when the original future completes successfully.
 
 =cut
 
@@ -550,6 +584,16 @@ method.
 
 Returns the C<$future>.
 
+=head2 $future->on_fail( $f )
+
+If passed another C<CPS::Future> instance, the passed instance will have its
+C<fail> method invoked when the original future fails.
+
+To invoke a C<done> method on a future when another one fails, use a CODE
+reference:
+
+ $future->on_fail( sub { $f->done( @_ ) } );
+
 =cut
 
 sub on_fail
@@ -598,7 +642,7 @@ By returning a new C<CPS::Future> object each time the asynchronous function
 is called, it provides a placeholder for its eventual result, and a way to
 indicate when it is complete.
 
- sub koperation
+ sub foperation
  {
     my %args = @_;
 
@@ -608,12 +652,26 @@ indicate when it is complete.
        foo => $args{foo},
        on_done => sub { $future->done( @_ ); },
     );
+
+    return $future;
  }
+
+In most cases, the C<done> method will simply be invoked with the entire
+result list as its arguments. In that case, it is simpler to pass the
+C<$future> object itself as if it was a C<CODE> reference; this will invoke
+the C<done> method.
+
+    my $future = CPS::Future->new;
+
+    kdo_something(
+       foo => $args{foo},
+       on_done => $future,
+    );
 
 The caller may then use this future to wait for a result using the C<on_ready>
 method, and obtain the result using C<get>.
 
- my $f = koperation( foo => "something" );
+ my $f = foperation( foo => "something" );
 
  $f->on_ready( sub {
     my $f = shift;

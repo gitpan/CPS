@@ -1,5 +1,10 @@
 Revision history for CPS
 
+0.16    CHANGES:
+         * Allow passing CPS::Future objects into others for on_ready, on_done
+           and on_fail callbacks (RT78432)
+         * Override calling on a CPS::Future to invoke ->done directly
+
 0.15    CHANGES:
          * More work on CPS::Future - added ->and_then, ->transform
 

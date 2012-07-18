@@ -2,7 +2,7 @@
 
 use strict;
 
-use Test::More tests => 32;
+use Test::More tests => 37;
 use Test::Fatal;
 use Test::Identity;
 use Test::Refcount;
@@ -39,6 +39,18 @@ use CPS::Future;
    is_oneref( $future, '$future has refcount 1 at end of test' );
 }
 
+# Callable
+{
+   my $future = CPS::Future->new;
+
+   my @on_done_args;
+   $future->on_done( sub { @on_done_args = @_ } );
+
+   $future->( another => "result" );
+
+   is_deeply( \@on_done_args, [ another => "result" ], '$future is directly callable' );
+}
+
 {
    my $future = CPS::Future->new;
 
@@ -48,6 +60,27 @@ use CPS::Future;
    $future->on_done( sub { @on_done_args = @_; } );
 
    is_deeply( \@on_done_args, [ already => "done" ], 'Results passed to on_done for already-done future' );
+}
+
+# done chaining
+{
+   my $future = CPS::Future->new;
+
+   my $f1 = CPS::Future->new;
+   my $f2 = CPS::Future->new;
+
+   $future->on_done( $f1 );
+   $future->on_ready( $f2 );
+
+   my @on_done_args_1;
+   $f1->on_done( sub { @on_done_args_1 = @_ } );
+   my @on_done_args_2;
+   $f2->on_done( sub { @on_done_args_2 = @_ } );
+
+   $future->done( chained => "result" );
+
+   is_deeply( \@on_done_args_1, [ chained => "result" ], 'Results chained via ->on_done( $f )' );
+   is_deeply( \@on_done_args_2, [ chained => "result" ], 'Results chained via ->on_ready( $f )' );
 }
 
 {
@@ -92,6 +125,27 @@ use CPS::Future;
    is( scalar $future->failure, "Something broke at $file line $line\n", '$future->failure yields exception' );
    is_deeply( [ $future->failure ], [ "Something broke at $file line $line\n", "further", "details" ],
          '$future->failure yields details in list context' );
+}
+
+# fail chaining
+{
+   my $future = CPS::Future->new;
+
+   my $f1 = CPS::Future->new;
+   my $f2 = CPS::Future->new;
+
+   $future->on_fail( $f1 );
+   $future->on_ready( $f2 );
+
+   my $failure_1;
+   $f1->on_fail( sub { ( $failure_1 ) = @_ } );
+   my $failure_2;
+   $f2->on_fail( sub { ( $failure_2 ) = @_ } );
+
+   $future->fail( "Chained failure\n" );
+
+   is( $failure_1, "Chained failure\n", 'Failure chained via ->on_fail( $f )' );
+   is( $failure_2, "Chained failure\n", 'Failure chained via ->on_ready( $f )' );
 }
 
 {
