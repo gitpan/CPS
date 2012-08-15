@@ -8,7 +8,7 @@ package CPS::Future;
 use strict;
 use warnings;
 
-our $VERSION = '0.16';
+our $VERSION = '0.17';
 
 use Carp;
 use Scalar::Util qw( weaken );
@@ -282,7 +282,7 @@ sub transform
       }
    );
 
-   $ret->on_cancel( sub { $self->cancel } );
+   $ret->on_cancel( $self );
 
    return $ret;
 }
@@ -326,23 +326,25 @@ interfaces.
 
 =head2 $future->done( @result )
 
-=head2 $future->( @result )
-
 Marks that the leaf future is now ready, and provides a list of values as a
 result. (The empty list is allowed, and still indicates the future as ready).
 Cannot be called on a non-leaf future.
 
 Returns the C<$future>.
 
+=head2 $future->( @result )
+
 This method is used to overload the calling operator, so simply invoking the
 future object itself as if it were a C<CODE> reference is equivalent to
 calling the C<done> method. This makes it simple to pass as a callback
 function to other code.
 
-=cut
+It turns out however, that this behaviour is too subtle and can lead to bugs
+when futures are accidentally used as plain C<CODE> references. See the
+C<done_cb> method instead. This overload behaviour will be removed in a later
+version.
 
-use overload '&{}' => sub { my $self = shift; sub { $self->done( @_ ) } },
-             fallback => 1;
+=cut
 
 sub done
 {
@@ -354,6 +356,22 @@ sub done
    $self->_mark_ready;
 
    return $self;
+}
+
+=head2 $code = $future->done_cb
+
+Returns a C<CODE> reference that, when invoked, calls the C<done> method. This
+makes it simple to pass as a callback function to other code.
+
+=cut
+
+use overload '&{}' => 'done_cb',
+             fallback => 1;
+
+sub done_cb
+{
+   my $self = shift;
+   return sub { $self->done( @_ ) };
 }
 
 =head2 $future->fail( $exception, @details )
@@ -389,6 +407,19 @@ sub fail
    return $self;
 }
 
+=head2 $code = $future->fail_cb
+
+Returns a C<CODE> reference that, when invoked, calls the C<fail> method. This
+makes it simple to pass as a callback function to other code.
+
+=cut
+
+sub fail_cb
+{
+   my $self = shift;
+   return sub { $self->fail( @_ ) };
+}
+
 =head2 $future->on_cancel( $code )
 
 If the future is not yet ready, adds a callback to be invoked if the future is
@@ -399,6 +430,11 @@ If the future is cancelled, the callbacks will be invoked in the reverse order
 to that in which they were registered.
 
  $on_cancel->( $future )
+
+=head2 $future->on_cancel( $f )
+
+If passed another C<CPS::Future> instance, the passed instance will be
+cancelled when the original future is cancelled.
 
 =cut
 
@@ -625,9 +661,24 @@ sub cancel
 
    $self->{cancelled}++;
    foreach my $cb ( reverse @{ $self->{on_cancel} || [] } ) {
-      $cb->( $self );
+      my $is_future = eval { $cb->isa( "CPS::Future" ) };
+      $is_future ? $cb->cancel
+                 : $cb->( $self );
    }
    $self->_mark_ready;
+}
+
+=head2 $code = $future->cancel_cb
+
+Returns a C<CODE> reference that, when invoked, calls the C<cancel> method.
+This makes it simple to pass as a callback function to other code.
+
+=cut
+
+sub cancel_cb
+{
+   my $self = shift;
+   return sub { $self->cancel };
 }
 
 =head1 EXAMPLES

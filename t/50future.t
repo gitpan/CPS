@@ -2,7 +2,7 @@
 
 use strict;
 
-use Test::More tests => 37;
+use Test::More tests => 44;
 use Test::Fatal;
 use Test::Identity;
 use Test::Refcount;
@@ -37,6 +37,20 @@ use CPS::Future;
    is_deeply( [ $future->get ], [ result => "here" ], 'Results from $future->get' );
 
    is_oneref( $future, '$future has refcount 1 at end of test' );
+}
+
+# done_cb
+{
+   my $future = CPS::Future->new;
+
+   my @on_done_args;
+   $future->on_done( sub { @on_done_args = @_ } );
+
+   my $done_cb = $future->done_cb;
+   is( ref $done_cb, "CODE", '->done_cb returns CODE reference' );
+
+   $done_cb->( result => "via cb" );
+   is_deeply( \@on_done_args, [ result => "via cb" ], 'Results via ->done_cb' );
 }
 
 # Callable
@@ -102,6 +116,20 @@ use CPS::Future;
    is( $failure, "Something broke at $file line $line\n", 'Exception passed to on_fail' );
 }
 
+# fail_cb
+{
+   my $future = CPS::Future->new;
+
+   my $failure;
+   $future->on_fail( sub { ( $failure ) = @_ } );
+
+   my $fail_cb = $future->fail_cb;
+   is( ref $fail_cb, "CODE", '->fail_cb returns CODE reference' );
+
+   $fail_cb->( "Failure by cb\n" );
+   is( $failure, "Failure by cb\n", 'Failure via ->fail_cb' );
+}
+
 {
    my $future = CPS::Future->new;
 
@@ -148,6 +176,7 @@ use CPS::Future;
    is( $failure_2, "Chained failure\n", 'Failure chained via ->on_ready( $f )' );
 }
 
+# cancel
 {
    my $future = CPS::Future->new;
 
@@ -172,6 +201,33 @@ use CPS::Future;
    is( $ready, 1, '$future on_ready still called by cancel' );
 
    like( exception { $future->get }, qr/cancelled/, '$future->get throws exception by cancel' );
+}
+
+# cancel_cb
+{
+   my $future = CPS::Future->new;
+
+   my $cancelled;
+   $future->on_cancel( sub { $cancelled++ } );
+
+   my $cancel_cb = $future->cancel_cb;
+   is( ref $cancel_cb, "CODE", '->cancel_cb returns CODE reference' );
+
+   $cancel_cb->();
+   is( $cancelled, 1, 'Cancellation via ->cancel_cb' );
+}
+
+# cancel chaining
+{
+   my $f1 = CPS::Future->new;
+   my $f2 = CPS::Future->new;
+
+   $f1->on_cancel( $f2 );
+   my $cancelled;
+   $f2->on_cancel( sub { $cancelled++ } );
+
+   $f1->cancel;
+   is( $cancelled, 1, 'Chained cancellation' );
 }
 
 # Transformations
