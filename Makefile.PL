@@ -5,6 +5,7 @@ WriteMakefile
   'NAME' => 'CPS',
   'VERSION_FROM' => 'lib/CPS.pm',
   'PREREQ_PM' => {
+                   'Future' => 0,
                    'Test::Fatal' => 0,
                    'Test::Identity' => 0,
                    'Test::More' => 0,

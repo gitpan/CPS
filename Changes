@@ -1,5 +1,11 @@
 Revision history for CPS
 
+0.18    CHANGES:
+         * Moved CPS::Future out to its own distribution, Future. Retained a
+           small back-compat wrapper for now
+         * Implement gkpar in terms of gkforeach so it respects the governor's
+           ->enter method
+
 0.17    CHANGES:
          * Supply ->done_cb, ->fail_cb, ->cancel_cb callback-generation
            methods to CPS::Future

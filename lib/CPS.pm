@@ -8,7 +8,7 @@ package CPS;
 use strict;
 use warnings;
 
-our $VERSION = '0.17';
+our $VERSION = '0.18';
 
 use Carp;
 
@@ -33,6 +33,8 @@ qw(
    dropk
 ),
 );
+
+use Exporter 'import';
 
 use CPS::Governor::Simple;
 
@@ -86,9 +88,7 @@ data through a program. That can be managed by lexical variables captured by
 the closures passed around. See the EXAMPLES section.
 
 For CPS versions of data-flow functionals, such as C<map> and C<grep>, see
-also L<CPS::Functional>. For backward compatibility with previous versions,
-the functions in C<CPS::Functional> are also exported here; and C<kunfold>
-is renamed to C<kgenerate>. This may be removed in a later version.
+also L<CPS::Functional>.
 
 =head1 SYNOPSIS
 
@@ -350,18 +350,23 @@ sub gkpar
       goto &$k;
    };
 
-   foreach my $idx ( 0 .. $#bodies ) {
-      $outstanding[$idx]++;
-      $gov->enter( $bodies[$idx], sub {
-         $outstanding[$idx]--;
+   gkforeach( $gov, [ 0 .. $#bodies ],
+      sub {
+         my ( $idx, $knext ) = @_;
+         $outstanding[$idx]++;
+         $gov->enter( $bodies[$idx], sub {
+               $outstanding[$idx]--;
+               @_ = ();
+               goto &$kdone;
+            } );
+         goto &$knext;
+      },
+      sub {
+         $sync = 0;
          @_ = ();
          goto &$kdone;
-      } );
-   }
-
-   $sync = 0;
-   @_ = ();
-   goto &$kdone;
+      }
+   );
 }
 
 =head2 kpareach( \@items, \&body, $k )
@@ -589,42 +594,6 @@ sub dropk(&$)
 
       return wantarray ? @result : $result[0];
    }
-}
-
-require Exporter;
-
-sub import
-{
-   my $pkg = shift;
-   my $caller = caller($Exporter::ExportLevel);
-
-   no strict 'refs';
-
-   my @symbols;
-
-   # Import legacy redirects with deprecation warnings
-
-   foreach ( @_ ) {
-      if( m/^g?(?:kmap|kgrep|kfoldl|kfoldr|kunfold)$/ ) {
-         warnings::warnif deprecated => "Legacy import of $_; use CPS::Functional '$_' instead";
-
-         require CPS::Functional;
-         *{$caller."::$_"} = \&{"CPS::Functional::$_"};
-      }
-      elsif( m/^(g?)kgenerate$/ ) {
-         my $from = "$1kunfold";
-         warnings::warnif deprecated => "Legacy import of $_; use CPS::Functional '$from' instead";
-
-         require CPS::Functional;
-         *{$caller."::$_"} = \&{"CPS::Functional::$from"};
-      }
-      else {
-         push @symbols, $_;
-      }
-   }
-
-   local $Exporter::ExportLevel = $Exporter::ExportLevel + 1;
-   Exporter::import( $pkg, @symbols );
 }
 
 =head1 EXAMPLES

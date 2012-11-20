@@ -38,9 +38,7 @@ OVERVIEW
     section.
 
     For CPS versions of data-flow functionals, such as `map' and `grep', see
-    also CPS::Functional. For backward compatibility with previous versions,
-    the functions in `CPS::Functional' are also exported here; and `kunfold'
-    is renamed to `kgenerate'. This may be removed in a later version.
+    also CPS::Functional.
 
 SYNOPSIS
      use CPS qw( kloop );
